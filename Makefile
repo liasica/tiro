@@ -37,7 +37,7 @@ lint:
 
 .PHONY: image
 image:
-	docker build -t tiro:$(VERSION) .
+	docker build --build-arg VERSION=$(VERSION) -t tiro:$(VERSION) .
 
 .PHONY: clean
 clean:
