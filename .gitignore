@@ -1,18 +1,34 @@
-# 系统与编辑器
-.DS_Store
-.idea/
-.vscode/
-*.swp
+# Go 构建产物
+/bin/
+/tiro
+*.exe
+*.test
+*.out
 
-# 本地配置与密钥
-.env
-.env.*
-!.env.example
-.deploy.env
-configs/config.yaml
-
-# 运行时数据
+# 本地数据与密钥
+/data/
 *.db
 *.db-shm
 *.db-wal
-runtime/
+.env
+.env.*
+!.env.example
+/.deploy.env
+
+# 前端
+/web/node_modules/
+/web/dist/
+/internal/web/dist/*
+!/internal/web/dist/.gitkeep
+.pnpm-store/
+*.tsbuildinfo
+
+# 日志与临时文件
+*.log
+/tmp/
+
+# 编辑器与系统
+/.idea/
+/.vscode/
+*.swp
+.DS_Store

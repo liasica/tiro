@@ -1,0 +1,364 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/instrument-sans';
+@import '@fontsource/instrument-serif/latin-400-italic.css';
+
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+/* 色彩令牌：深色为基调，墨蓝底配复写纸蓝 */
+:root,
+[data-theme='dark'] {
+  --bg: #0d1017;
+  --surface: #131722;
+  --raised: #1a1f2c;
+  --line: rgb(150 165 210 / 0.11);
+  --line-strong: rgb(150 165 210 / 0.22);
+  --text: #e7e9f0;
+  --muted: #8d94a8;
+  --faint: #5f667a;
+  --accent: #9aaaff;
+  --accent-strong: #b3c0ff;
+  --accent-soft: rgb(154 170 255 / 0.12);
+  --on-accent: #0d1017;
+  --ok: #63caa6;
+  --warn: #e3b765;
+  --err: #f08181;
+  --rule: rgb(150 165 210 / 0.045);
+  --glow: rgb(154 170 255 / 0.18);
+  --shadow: 0 24px 60px -24px rgb(0 0 0 / 0.6);
+  color-scheme: dark;
+}
+
+[data-theme='light'] {
+  --bg: #f5f6f9;
+  --surface: #ffffff;
+  --raised: #eef0f5;
+  --line: rgb(30 40 80 / 0.09);
+  --line-strong: rgb(30 40 80 / 0.18);
+  --text: #151a26;
+  --muted: #5a6275;
+  --faint: #8f96a8;
+  --accent: #3f52d6;
+  --accent-strong: #2f40b8;
+  --accent-soft: rgb(63 82 214 / 0.08);
+  --on-accent: #ffffff;
+  --ok: #1d8660;
+  --warn: #a5690f;
+  --err: #c7443f;
+  --rule: rgb(30 40 80 / 0.03);
+  --glow: rgb(63 82 214 / 0.12);
+  --shadow: 0 24px 60px -28px rgb(20 30 70 / 0.28);
+  color-scheme: light;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-soft: var(--accent-soft);
+  --color-on-accent: var(--on-accent);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-err: var(--err);
+  --font-sans: 'Instrument Sans Variable', 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', system-ui, sans-serif;
+  --font-serif: 'Instrument Serif', 'Songti SC', serif;
+}
+
+@layer base {
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.6;
+  font-feature-settings: 'tnum' 1;
+  -webkit-font-smoothing: antialiased;
+  transition: background-color 0.2s ease;
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+input,
+textarea,
+select,
+button {
+  font: inherit;
+  color: inherit;
+}
+}
+
+/* 速记本横线底纹，从顶部向下淡出 */
+.ruled {
+  position: relative;
+  isolation: isolate;
+}
+
+.ruled::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: repeating-linear-gradient(to bottom, transparent 0 31px, var(--rule) 31px 32px);
+  mask-image: linear-gradient(to bottom, #000 0%, transparent 70%);
+}
+
+/* 二维码等待扫描时的扫描线 */
+@keyframes scan {
+  0% {
+    transform: translateY(0);
+    opacity: 0;
+  }
+  10%,
+  90% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(var(--scan-h, 240px));
+    opacity: 0;
+  }
+}
+
+.scan-line {
+  animation: scan 2.8s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+@keyframes drawer-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes rise-in {
+  from {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+}
+
+.anim-drawer {
+  animation: drawer-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.anim-fade {
+  animation: fade-in 0.18s ease-out;
+}
+
+.anim-rise {
+  animation: rise-in 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes pulse-dot {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.pulse-dot {
+  animation: pulse-dot 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scan-line,
+  .pulse-dot,
+  .anim-drawer,
+  .anim-fade,
+  .anim-rise {
+    animation: none;
+  }
+}
+
+/* 纪要 Markdown 预览 */
+.md {
+  font-size: 14px;
+  line-height: 1.75;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.md > :first-child {
+  margin-top: 0;
+}
+
+.md h1,
+.md h2,
+.md h3,
+.md h4 {
+  font-weight: 600;
+  line-height: 1.4;
+  margin: 1.8em 0 0.6em;
+}
+
+.md h1 {
+  font-size: 20px;
+}
+
+.md h2 {
+  font-size: 16px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+.md h3 {
+  font-size: 14px;
+}
+
+.md p,
+.md ul,
+.md ol,
+.md table,
+.md blockquote,
+.md pre {
+  margin: 0.7em 0;
+}
+
+.md ul,
+.md ol {
+  padding-left: 1.4em;
+}
+
+.md ul {
+  list-style: disc;
+}
+
+.md ol {
+  list-style: decimal;
+}
+
+.md li {
+  margin: 0.25em 0;
+}
+
+.md li::marker {
+  color: var(--faint);
+}
+
+.md ul.contains-task-list {
+  list-style: none;
+  padding-left: 0.2em;
+}
+
+.md li.task-list-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6em;
+}
+
+.md li.task-list-item input[type='checkbox'] {
+  appearance: none;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-top: 0.42em;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  background: var(--surface);
+}
+
+.md li.task-list-item input[type='checkbox']:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 8.5l2.5 2.5L12 5.5' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+.md a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+}
+
+.md a:hover {
+  text-decoration-color: var(--accent);
+}
+
+.md strong {
+  font-weight: 600;
+}
+
+.md code {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 0.88em;
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  background: var(--raised);
+}
+
+.md pre {
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--raised);
+  overflow-x: auto;
+}
+
+.md pre code {
+  padding: 0;
+  background: none;
+}
+
+.md blockquote {
+  padding-left: 12px;
+  border-left: 2px solid var(--accent);
+  color: var(--muted);
+}
+
+.md hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 1.6em 0;
+}
+
+.md table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.md th,
+.md td {
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.md th {
+  font-weight: 600;
+  background: var(--raised);
+  white-space: nowrap;
+}
+
+.md tbody tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--raised) 45%, transparent);
+}

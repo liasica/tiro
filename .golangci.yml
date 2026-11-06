@@ -1,0 +1,91 @@
+version: "2"
+
+linters:
+  default: none
+  enable:
+    - dupl
+    - dupword
+    - errcheck
+    - govet
+    - ineffassign
+    - misspell
+    - revive
+    - staticcheck
+    - gclint
+    - whitespace
+    - wsl_v5
+  exclusions:
+    paths:
+      - "^runtime/"
+      - "^public/"
+      - "^web/"
+    rules:
+      - linters:
+          - revive
+        text: "should have a package comment|package comment should be of the form"
+  settings:
+    lll:
+      line-length: 200
+    custom:
+      gclint:
+        type: module
+        description: Enforce custom Go style rules with the gclint plugin.
+        settings:
+          max_inline_params: 5
+          err_varname:
+            enabled: true
+            allowed_names:
+              - err
+              - snagErr
+              - httpErr
+    dupword:
+      # 格式动词不是重复单词，"%s %s" 这类写法会被误判
+      ignore:
+        - "%s"
+        - "%d"
+        - "%v"
+
+    dupl:
+      # Tokens count to trigger issue.
+      # Default: 150
+      threshold: 200
+    revive:
+      severity: warning
+      rules:
+        - name: var-naming
+        - name: error-return
+        - name: error-naming
+        - name: indent-error-flow
+        - name: unused-parameter
+        - name: range-val-in-closure
+        - name: empty-block
+        - name: superfluous-else
+        - name: unreachable-code
+        - name: redefines-builtin-id
+    wsl_v5:
+      allow-first-in-block: false
+      allow-whole-block: false
+      branch-max-lines: 2
+      case-max-lines: 0
+      default: none
+      enable:
+        - append
+        - assign
+        - assign-exclusive
+        - branch
+        - decl
+        - defer
+        - err
+        - for
+        - go
+        - if
+        - inc-dec
+        - label
+        - leading-whitespace
+        - range
+        - return
+        - select
+        - send
+        - switch
+        - trailing-whitespace
+        - type-switch
