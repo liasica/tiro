@@ -87,5 +87,5 @@ Tiro 把飞书妙记自动整理成会议纪要：发现授权用户名下新生
 - Go 代码遵循 `go-style` skill，提交前 `make lint` 必须无 issue；lint 配置要求多于 5 个参数的调用逐行书写，同一作用域里不用 `:=` 重复接收 `err`
 - 前端提交前 `pnpm lint` 与 `pnpm build` 必须无报错
 - 前端构建产物输出到 `internal/web/dist`，不入库，只保留 `.gitkeep`
-- 环境变量 `TIRO_FEISHU_OPEN_BASE` 与 `TIRO_FEISHU_ACCOUNTS_BASE` 可以把飞书请求指向本地的模拟服务，用于不依赖真实账号的联调
+- 环境变量 `TIRO_FEISHU_OPEN_BASE` 与 `TIRO_FEISHU_ACCOUNTS_BASE` 可以把飞书请求指向本地的模拟服务，用于不依赖真实账号的联调；模拟服务是 `scripts/fake_feishu.py`，同时扮演飞书与模型接口，用法见文件头部
 - 默认分支 `master`，提交信息遵循 `git-commit` skill

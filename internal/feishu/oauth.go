@@ -15,7 +15,7 @@ const (
 	pathDeviceAuthorization = "/oauth/v1/device_authorization"
 	pathOAuthToken          = "/oauth/v3/token"
 
-	// 扫码建应用的页面按接入方版本号放行，取值与飞书官方命令行工具的参数一致
+	// 扫码建应用页面链接里的版本号参数，取值与飞书官方命令行工具一致
 	registrationClientVersion = "1.0.99"
 )
 
