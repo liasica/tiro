@@ -23,6 +23,9 @@ const (
 // 此时文档可能已经建好，调用方不应自动重试，否则会在用户云空间里留下重复文档
 var ErrDocumentUncertain = errors.New("文档创建结果未知")
 
+// errDocumentInterrupted 表示服务停止时文档还在创建中
+var errDocumentInterrupted = fmt.Errorf("%w: 服务停止时文档还在创建中", ErrDocumentUncertain)
+
 // Document 是新建的飞书文档
 type Document struct {
 	ID  string `json:"document_id"`
@@ -165,7 +168,7 @@ func (c *Client) waitDocumentTask(ctx context.Context, accessToken, origin strin
 
 		select {
 		case <-ctx.Done():
-			return nil, fmt.Errorf("%w: %w", ErrDocumentUncertain, ctx.Err())
+			return nil, errDocumentInterrupted
 		case <-time.After(interval):
 		}
 
@@ -176,6 +179,10 @@ func (c *Client) waitDocumentTask(ctx context.Context, accessToken, origin strin
 			path:        "/open-apis/docs_ai/v1/async_tasks/" + url.PathEscape(task.TaskID),
 			accessToken: accessToken,
 		}, &response)
+		if err != nil && ctx.Err() != nil {
+			return nil, errDocumentInterrupted
+		}
+
 		if err != nil {
 			return nil, fmt.Errorf("%w: %w", ErrDocumentUncertain, err)
 		}

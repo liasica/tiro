@@ -8,7 +8,7 @@
         TIRO_DATA_DIR=/tmp/tiro-dev ./bin/tiro
 
 扫码步骤用 GET /control?approve_app=1 与 /control?approve_auth=1 模拟确认，
-fail_llm、fail_doc、fail_refresh 置 1 可以模拟对应环节出错
+fail_llm、fail_doc、fail_refresh 置 1 可以模拟对应环节出错，hang_doc 置 1 让建文档的异步任务一直停在处理中
 后台里的模型接口地址填 http://127.0.0.1:8477/v1
 """
 import json
@@ -30,6 +30,7 @@ state = {
     "fail_llm": False,
     "fail_doc": False,
     "fail_refresh": False,
+    "hang_doc": False,
 }
 
 MINUTES = {
@@ -147,6 +148,8 @@ class Handler(BaseHTTPRequestHandler):
             }}})
 
         if path.startswith("/open-apis/docs_ai/v1/async_tasks/"):
+            if state["hang_doc"]:
+                return self.reply({"code": 0, "data": {"task": {"task_id": path.rsplit("/", 1)[1], "status": "processing", "poll_after_ms": 300}}})
             document = {"document": {"document_id": f"doc_fake_{state['doc_count']}", "url": f"https://example.feishu.cn/docx/doc_fake_{state['doc_count']}"}}
             return self.reply({"code": 0, "data": {"task": {"task_id": path.rsplit("/", 1)[1], "status": "success", "result": {"create_document": json.dumps(document)}}}})
 
