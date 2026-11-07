@@ -103,3 +103,12 @@ Tiro 把飞书妙记自动整理成会议纪要：发现授权用户名下新生
 - 前端构建产物输出到 `internal/web/dist`，不入库，只保留 `.gitkeep`
 - 环境变量 `TIRO_FEISHU_OPEN_BASE` 与 `TIRO_FEISHU_ACCOUNTS_BASE` 可以把飞书请求指向本地的模拟服务，用于不依赖真实账号的联调；模拟服务是 `scripts/fake_feishu.py`，同时扮演飞书与模型接口，用法见文件头部
 - 默认分支 `master`，提交信息遵循 `git-commit` skill
+- 本地开发并自查完成后直接提交、推送 `master` 上线，不另行确认
+- 仓库公开：代码、示例数据、注释、文档与提交信息里不写真实的人名、会议内容、公司业务、服务器信息与任何凭据
+
+## 部署
+
+- 推送 `master` 即上线：`.github/workflows/deploy.yml` 在 GitHub 托管的 Runner 上编译前端与二进制，经 SSH 上传到服务器并重启 systemd 服务 `tiro`，等到 `/api/state` 报告本次构建的版本才算成功
+- Go 模块与编译缓存由 `setup-go` 按 `go.sum` 缓存，pnpm 依赖仓库按 `web/pnpm-lock.yaml` 缓存
+- 服务器地址、登录用户、部署目录与 SSH 密钥存在仓库 Secrets：`SSH_HOST`、`SSH_USER`、`SSH_KEY`、`SSH_KNOWN_HOSTS`、`DEPLOY_PATH`；工作流不输出服务日志
+- 部署目录里有当前二进制 `tiro`、上一版 `tiro.prev`、环境文件 `tiro.env`（`TIRO_ADDR`、`TIRO_DATA_DIR`）与数据目录 `data/`；回滚时把 `tiro.prev` 换回 `tiro` 再重启服务

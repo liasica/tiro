@@ -1,0 +1,107 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# 部署排队执行，不取消进行中的部署
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build and deploy
+    # 部署依赖本仓库的 Secrets，fork 里不运行
+    if: github.repository == 'liasica/tiro'
+    runs-on: ubuntu-latest
+    env:
+      SSH_TARGET: ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}
+      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+
+      # pnpm 版本取 package.json 的 packageManager，依赖仓库按锁文件缓存
+      - name: Set up pnpm
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          package_json_file: web/package.json
+          cache: true
+          cache_dependency_path: web/pnpm-lock.yaml
+
+      # 用最新的稳定版 Go，按 go.sum 缓存模块与编译缓存，只重新编译改动过的包
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+
+      - name: Build web
+        working-directory: web
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      - name: Build binary
+        id: build
+        env:
+          CGO_ENABLED: '0'
+        run: |
+          version=$(git describe --tags --always)
+          make build VERSION="$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Configure SSH
+        env:
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Upload binary
+        run: scp -q bin/tiro "$SSH_TARGET:$DEPLOY_PATH/tiro.new"
+
+      # 替换二进制后重启服务，确认对外报告的是本次构建的版本；服务日志含成员与会议信息，不输出到公开的 Actions 日志
+      - name: Restart service
+        env:
+          VERSION: ${{ steps.build.outputs.version }}
+        run: |
+          ssh "$SSH_TARGET" "sh -s -- '$DEPLOY_PATH' '$VERSION'" <<'SCRIPT'
+          set -eu
+          cd "$1"
+
+          chmod 755 tiro.new
+          if [ -f tiro ]; then
+            mv -f tiro tiro.prev
+          fi
+          mv -f tiro.new tiro
+          systemctl restart tiro
+
+          # 监听地址取自服务的环境文件
+          . ./tiro.env
+
+          for _ in $(seq 1 15); do
+            if curl -fs "http://$TIRO_ADDR/api/state" | grep -q "\"version\":\"$2\""; then
+              echo "已上线版本 $2"
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "服务在 30 秒内没有报告版本 $2，在服务器上用 journalctl -u tiro 查看日志"
+          exit 1
+          SCRIPT
