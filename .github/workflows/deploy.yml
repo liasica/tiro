@@ -41,11 +41,11 @@ jobs:
           cache: true
           cache_dependency_path: web/pnpm-lock.yaml
 
-      # 用最新的稳定版 Go，按 go.sum 缓存模块与编译缓存，只重新编译改动过的包
+      # Go 版本取 go.mod，按 go.sum 缓存模块与编译缓存，只重新编译改动过的包
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: stable
+          go-version-file: go.mod
 
       - name: Build web
         working-directory: web
