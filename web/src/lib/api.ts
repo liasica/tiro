@@ -53,12 +53,27 @@ export interface MinuteRecord {
   reason: string
   attempts: number
   doc_url: string
+  total_tokens: number
   created_at: string | null
   finished_at: string | null
 }
 
+export interface LlmCall {
+  id: number
+  model: string
+  prompt_tokens: number
+  cached_tokens: number
+  completion_tokens: number
+  reasoning_tokens: number
+  total_tokens: number
+  duration_ms: number
+  error: string
+  created_at: string | null
+}
+
 export interface MinuteDetail extends MinuteRecord {
   summary_markdown: string
+  llm_calls: LlmCall[]
 }
 
 export interface Page<T> {
@@ -74,6 +89,7 @@ export interface Stats {
   failed: number
   pending: number
   skipped: number
+  total_tokens: number
   last_sync_at: string | null
 }
 

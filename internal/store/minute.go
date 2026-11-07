@@ -36,9 +36,10 @@ type Minute struct {
 	UpdatedAt       time.Time
 	FinishedAt      time.Time
 
-	// 以下字段来自关联的用户，只在读取时填充
+	// 以下字段来自关联的用户与模型调用记录，只在读取时填充
 	OwnerName      string
 	OwnerAvatarURL string
+	TotalTokens    int64
 }
 
 // MinuteFilter 是列表查询条件，UserID 为 0 表示不限所有者
@@ -49,18 +50,20 @@ type MinuteFilter struct {
 	Offset int
 }
 
-// MinuteStats 是各状态的记录数
+// MinuteStats 是各状态的记录数与累计消耗的 token 数
 type MinuteStats struct {
-	Total   int
-	Done    int
-	Failed  int
-	Pending int
-	Skipped int
+	Total       int
+	Done        int
+	Failed      int
+	Pending     int
+	Skipped     int
+	TotalTokens int64
 }
 
 const minuteColumns = `m.id, m.user_id, m.minute_token, m.minute_url, m.title, m.minute_created_at,
 	m.duration_seconds, m.status, m.reason, m.attempts, m.next_attempt_at, m.doc_url, m.summary_markdown,
-	m.doc_title, m.created_at, m.updated_at, m.finished_at, u.name, u.avatar_url`
+	m.doc_title, m.created_at, m.updated_at, m.finished_at, u.name, u.avatar_url,
+	(SELECT COALESCE(SUM(c.total_tokens), 0) FROM llm_calls c WHERE c.minute_id = m.id)`
 
 const minuteFrom = ` FROM minutes m JOIN users u ON u.id = m.user_id`
 
@@ -90,6 +93,7 @@ func scanMinute(row scanner) (*Minute, error) {
 		&finished,
 		&minute.OwnerName,
 		&minute.OwnerAvatarURL,
+		&minute.TotalTokens,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -298,19 +302,25 @@ func (s *Store) ResetProcessing(ctx context.Context) error {
 	return err
 }
 
-// MinuteStats 统计各状态的记录数，userID 为 0 表示全部用户
+// MinuteStats 统计各状态的记录数与累计消耗的 token 数，userID 为 0 表示全部用户
 func (s *Store) MinuteStats(ctx context.Context, userID int64) (MinuteStats, error) {
 	query := `SELECT status, COUNT(*) FROM minutes`
+	tokenQuery := `SELECT COALESCE(SUM(c.total_tokens), 0) FROM llm_calls c JOIN minutes m ON m.id = c.minute_id`
 
 	var args []any
 
 	if userID != 0 {
 		query += ` WHERE user_id = ?`
+		tokenQuery += ` WHERE m.user_id = ?`
 
 		args = append(args, userID)
 	}
 
 	var stats MinuteStats
+
+	if err := s.db.QueryRowContext(ctx, tokenQuery, args...).Scan(&stats.TotalTokens); err != nil {
+		return stats, err
+	}
 
 	rows, err := s.db.QueryContext(ctx, query+` GROUP BY status`, args...)
 	if err != nil {

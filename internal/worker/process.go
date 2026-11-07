@@ -234,9 +234,15 @@ func (w *Worker) summarize(ctx context.Context, config *store.Config, accessToke
 		Transcript:    transcript,
 	}
 
-	var result *summary.Result
+	var (
+		result *summary.Result
+		usage  llm.Usage
+	)
 
-	result, err = summary.Generate(ctx, model, config.Prompt, input)
+	result, usage, err = summary.Generate(ctx, model, config.Prompt, input)
+
+	w.recordUsage(ctx, record.ID, usage, err)
+
 	if err != nil {
 		return err
 	}
@@ -245,6 +251,35 @@ func (w *Worker) summarize(ctx context.Context, config *store.Config, accessToke
 	record.SummaryMarkdown = result.Markdown
 
 	return nil
+}
+
+// recordUsage 记下一次模型调用的用量，出错且没有产生用量的调用不记
+//
+// 写入失败只记日志，不影响纪要生成
+func (w *Worker) recordUsage(ctx context.Context, minuteID int64, usage llm.Usage, cause error) {
+	if cause != nil && usage.TotalTokens == 0 {
+		return
+	}
+
+	call := &store.LLMCall{
+		MinuteID:         minuteID,
+		Model:            usage.Model,
+		PromptTokens:     usage.PromptTokens,
+		CachedTokens:     usage.CachedTokens,
+		CompletionTokens: usage.CompletionTokens,
+		ReasoningTokens:  usage.ReasoningTokens,
+		TotalTokens:      usage.TotalTokens,
+		DurationMillis:   usage.Duration.Milliseconds(),
+	}
+
+	if cause != nil {
+		call.Error = cause.Error()
+	}
+
+	// 进程退出时 ctx 已取消，已经产生的用量照样要记下
+	if err := w.store.InsertLLMCall(context.WithoutCancel(ctx), call); err != nil {
+		slog.Error("记录模型用量失败", "id", minuteID, "error", err)
+	}
 }
 
 // createDocument 在用户云空间的纪要文件夹里新建文档

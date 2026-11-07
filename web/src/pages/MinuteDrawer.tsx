@@ -4,8 +4,8 @@ import type { ReactNode } from 'react'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Avatar, Button, Drawer, LinkButton, ErrorLine, Spinner, StatusBadge } from '../components/ui'
-import { api } from '../lib/api'
-import { formatDuration, formatTime } from '../lib/format'
+import { api, type LlmCall } from '../lib/api'
+import { formatCount, formatDuration, formatMillis, formatTime } from '../lib/format'
 import { useToast } from '../lib/toast'
 import { cx, generateLabel } from '../lib/ui'
 
@@ -107,11 +107,10 @@ export function MinuteDrawer({ id, admin, onClose }: { id: number; admin: boolea
               </div>
             )}
 
+            {r.llm_calls.length > 0 && <Usage calls={r.llm_calls} />}
+
             <section className="mt-8">
-              <h3 className="mb-3 flex items-center gap-3 text-xs text-faint">
-                纪要预览
-                <span className="h-px flex-1 bg-line" />
-              </h3>
+              <SectionTitle>纪要预览</SectionTitle>
               {r.summary_markdown ? (
                 <article className="md">
                   <Markdown remarkPlugins={[remarkGfm]} components={{ a: (p) => <a {...p} target="_blank" rel="noreferrer" /> }}>
@@ -126,6 +125,82 @@ export function MinuteDrawer({ id, admin, onClose }: { id: number; admin: boolea
         )}
       </div>
     </Drawer>
+  )
+}
+
+function SectionTitle({ children }: { children: ReactNode }) {
+  return (
+    <h3 className="mb-3 flex items-center gap-3 text-xs text-faint">
+      {children}
+      <span className="h-px flex-1 bg-line" />
+    </h3>
+  )
+}
+
+type TokenKey = 'prompt_tokens' | 'cached_tokens' | 'completion_tokens' | 'reasoning_tokens' | 'total_tokens' | 'duration_ms'
+
+// 历次模型调用的用量，多于一次时末行给出合计
+function Usage({ calls }: { calls: LlmCall[] }) {
+  const sum = (key: TokenKey) => calls.reduce((n, c) => n + c[key], 0)
+  return (
+    <section className="mt-8">
+      <SectionTitle>模型消耗</SectionTitle>
+      <div className="overflow-x-auto rounded-lg border border-line">
+        <table className="w-full min-w-[560px] border-collapse text-[13px] tabular-nums">
+          <thead>
+            <tr className="border-b border-line text-left text-xs text-faint">
+              <th className="px-3 py-2 font-normal">时间</th>
+              <th className="px-3 py-2 font-normal">模型</th>
+              <th className="px-3 py-2 text-right font-normal">输入</th>
+              <th className="px-3 py-2 text-right font-normal">输出</th>
+              <th className="px-3 py-2 text-right font-normal">合计</th>
+              <th className="px-3 py-2 text-right font-normal">耗时</th>
+            </tr>
+          </thead>
+          <tbody>
+            {calls.map((c) => (
+              <tr key={c.id} className="border-b border-line align-top last:border-0">
+                <td className="px-3 py-2 whitespace-nowrap text-muted">{formatTime(c.created_at)}</td>
+                <td className="px-3 py-2">
+                  <div className="break-all">{c.model || '—'}</div>
+                  {c.error && <div className="mt-0.5 text-xs text-err">{c.error}</div>}
+                </td>
+                <TokenCell value={c.prompt_tokens} part={c.cached_tokens} partLabel="缓存命中" />
+                <TokenCell value={c.completion_tokens} part={c.reasoning_tokens} partLabel="推理" />
+                <td className="px-3 py-2 text-right">{formatCount(c.total_tokens)}</td>
+                <td className="px-3 py-2 text-right whitespace-nowrap text-muted">{formatMillis(c.duration_ms)}</td>
+              </tr>
+            ))}
+          </tbody>
+          {calls.length > 1 && (
+            <tfoot>
+              <tr className="border-t border-line bg-raised/60 align-top font-medium">
+                <td className="px-3 py-2" colSpan={2}>
+                  合计 {calls.length} 次调用
+                </td>
+                <TokenCell value={sum('prompt_tokens')} part={sum('cached_tokens')} partLabel="缓存命中" />
+                <TokenCell value={sum('completion_tokens')} part={sum('reasoning_tokens')} partLabel="推理" />
+                <td className="px-3 py-2 text-right">{formatCount(sum('total_tokens'))}</td>
+                <td className="px-3 py-2 text-right whitespace-nowrap">{formatMillis(sum('duration_ms'))}</td>
+              </tr>
+            </tfoot>
+          )}
+        </table>
+      </div>
+    </section>
+  )
+}
+
+function TokenCell({ value, part, partLabel }: { value: number; part: number; partLabel: string }) {
+  return (
+    <td className="px-3 py-2 text-right">
+      <div>{formatCount(value)}</div>
+      {part > 0 && (
+        <div className="text-xs font-normal whitespace-nowrap text-faint">
+          {partLabel} {formatCount(part)}
+        </div>
+      )}
+    </td>
   )
 }
 

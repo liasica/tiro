@@ -233,7 +233,15 @@ class Handler(BaseHTTPRequestHandler):
             user = body["messages"][-1]["content"]
             log("chat", {"model": body.get("model"), "auth": self.headers.get("Authorization", ""), "system_len": len(body["messages"][0]["content"]), "user_head": user[:160]})
             content = "连接正常" if "连接测试" in user else REPLY
-            return self.reply({"choices": [{"message": {"role": "assistant", "content": content}}]})
+            prompt = sum(len(m["content"]) for m in body["messages"])
+            usage = {
+                "prompt_tokens": prompt,
+                "completion_tokens": len(content) + 256,
+                "total_tokens": prompt + len(content) + 256,
+                "prompt_tokens_details": {"cached_tokens": prompt // 4},
+                "completion_tokens_details": {"reasoning_tokens": 256},
+            }
+            return self.reply({"model": body.get("model"), "choices": [{"message": {"role": "assistant", "content": content}}], "usage": usage})
 
         self.reply({"code": 404, "msg": "unknown " + path}, 404)
 

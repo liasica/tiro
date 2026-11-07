@@ -62,17 +62,23 @@ type Result struct {
 }
 
 // Generate 调用模型生成纪要，prompt 为空时使用内置提示词
-func Generate(ctx context.Context, config llm.Config, prompt string, input Input) (*Result, error) {
+//
+// 出错时也返回本次调用的用量
+func Generate(ctx context.Context, config llm.Config, prompt string, input Input) (*Result, llm.Usage, error) {
 	if strings.TrimSpace(prompt) == "" {
 		prompt = DefaultPrompt()
 	}
 
-	reply, err := llm.Chat(ctx, config, prompt, buildUserMessage(input))
+	reply, usage, err := llm.Chat(ctx, config, prompt, buildUserMessage(input))
 	if err != nil {
-		return nil, err
+		return nil, usage, err
 	}
 
-	return compose(input, reply), nil
+	result := compose(input, reply)
+
+	result.Markdown += usageSection(usage)
+
+	return result, usage, nil
 }
 
 // buildUserMessage 把会议信息、术语表、飞书总结与逐字稿拼成给模型的输入
@@ -251,6 +257,55 @@ func timestampURL(minuteURL, stamp string) string {
 	parsed.RawQuery = query.Encode()
 
 	return parsed.String()
+}
+
+// usageSection 写出文档末尾的模型消耗一节，接口没有返回用量时不写 token 数，不足 1 秒时不写耗时
+func usageSection(usage llm.Usage) string {
+	var section strings.Builder
+
+	section.WriteString("\n# 模型消耗\n\n")
+	_, _ = fmt.Fprintf(&section, "- 模型：%s\n", escapeMarkdown(usage.Model))
+
+	if usage.TotalTokens > 0 {
+		_, _ = fmt.Fprintf(&section, "- 输入 Token：%s%s\n", groupDigits(usage.PromptTokens), partOf("缓存命中", usage.CachedTokens))
+		_, _ = fmt.Fprintf(&section, "- 输出 Token：%s%s\n", groupDigits(usage.CompletionTokens), partOf("推理", usage.ReasoningTokens))
+		_, _ = fmt.Fprintf(&section, "- 合计 Token：%s\n", groupDigits(usage.TotalTokens))
+	}
+
+	if usage.Duration >= time.Second {
+		_, _ = fmt.Fprintf(&section, "- 生成耗时：%s\n", FormatDuration(usage.Duration))
+	}
+
+	return section.String()
+}
+
+// partOf 写出「，其中缓存命中 1,024」这类补充说明，数量为 0 时返回空串
+func partOf(label string, count int64) string {
+	if count <= 0 {
+		return ""
+	}
+
+	return "，其中" + label + " " + groupDigits(count)
+}
+
+// groupDigits 每三位加一个千位分隔符，例如 12345 写成 12,345
+func groupDigits(count int64) string {
+	digits := strconv.FormatInt(count, 10)
+	if count < 0 {
+		return digits
+	}
+
+	var grouped strings.Builder
+
+	for i, digit := range digits {
+		if i > 0 && (len(digits)-i)%3 == 0 {
+			grouped.WriteByte(',')
+		}
+
+		grouped.WriteRune(digit)
+	}
+
+	return grouped.String()
 }
 
 func orTitle(title string) string {

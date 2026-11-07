@@ -5,7 +5,7 @@ import { useSearchParams } from 'react-router'
 import { Avatar, Button, ErrorLine, Input, Modal, PageHeader, Segmented, Spinner, StatusBadge } from '../components/ui'
 import type { MinuteRecord, RecordStatus, Scope, Stats } from '../lib/api'
 import { api } from '../lib/api'
-import { formatDuration, formatTime } from '../lib/format'
+import { formatCount, formatDuration, formatTime, formatTokens } from '../lib/format'
 import { useToast } from '../lib/toast'
 import { cx, generateLabel } from '../lib/ui'
 
@@ -60,7 +60,7 @@ export function Minutes({ admin }: { admin: boolean }) {
 
   const total = list.data?.total ?? 0
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE))
-  const columns = admin ? 6 : 5
+  const columns = admin ? 7 : 6
 
   return (
     <div>
@@ -102,6 +102,7 @@ export function Minutes({ admin }: { admin: boolean }) {
               <th className="px-4 py-2.5 font-normal">标题</th>
               <th className="hidden w-40 px-4 py-2.5 font-normal md:table-cell">妙记时间</th>
               <th className="hidden w-28 px-4 py-2.5 font-normal lg:table-cell">时长</th>
+              <th className="hidden w-24 px-4 py-2.5 font-normal lg:table-cell">Token</th>
               <th className="w-24 px-4 py-2.5 font-normal sm:w-44">状态</th>
               <th className="hidden w-20 px-4 py-2.5 font-normal sm:table-cell">纪要</th>
               {admin && (
@@ -169,14 +170,18 @@ function StatsStrip({ stats }: { stats?: Stats }) {
     { label: '已跳过', value: stats?.skipped },
   ]
   return (
-    <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line sm:grid-cols-3 lg:grid-cols-6">
+    <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line sm:grid-cols-4 lg:grid-cols-7">
       {cells.map((c) => (
         <div key={c.label} className="bg-surface px-5 py-4">
           <div className="text-xs text-faint">{c.label}</div>
           <div className={cx('mt-1 text-[28px] leading-tight font-light tracking-tight tabular-nums', c.tone ?? 'text-text')}>{c.value ?? '–'}</div>
         </div>
       ))}
-      <div className="flex flex-col justify-center bg-surface px-5 py-4">
+      <div className="bg-surface px-5 py-4" title={stats ? `${formatCount(stats.total_tokens)} Token` : undefined}>
+        <div className="text-xs text-faint">累计 Token</div>
+        <div className="mt-1 text-[28px] leading-tight font-light tracking-tight text-text tabular-nums">{stats ? formatTokens(stats.total_tokens) : '–'}</div>
+      </div>
+      <div className="col-span-2 flex flex-col justify-center bg-surface px-5 py-4 lg:col-span-1">
         <div className="text-xs text-faint">最近检查</div>
         <div className="mt-1.5 text-sm text-muted tabular-nums">{stats ? formatTime(stats.last_sync_at) : '–'}</div>
       </div>
@@ -225,6 +230,9 @@ function Row({ record: r, admin, showOwner, onOpen }: { record: MinuteRecord; ad
       </td>
       <td className="hidden px-4 py-3 text-muted tabular-nums md:table-cell">{formatTime(r.minute_created_at)}</td>
       <td className="hidden px-4 py-3 text-muted tabular-nums lg:table-cell">{formatDuration(r.duration_seconds)}</td>
+      <td className="hidden px-4 py-3 text-muted tabular-nums lg:table-cell" title={r.total_tokens > 0 ? formatCount(r.total_tokens) : undefined}>
+        {formatTokens(r.total_tokens)}
+      </td>
       <td className="px-4 py-3">
         <StatusBadge status={r.status} />
         {r.reason && (r.status === 'failed' || r.status === 'skipped') && (

@@ -79,8 +79,23 @@ CREATE TABLE IF NOT EXISTS minutes (
 	UNIQUE (user_id, minute_token)
 );
 
+CREATE TABLE IF NOT EXISTS llm_calls (
+	id                INTEGER PRIMARY KEY AUTOINCREMENT,
+	minute_id         INTEGER NOT NULL REFERENCES minutes(id),
+	model             TEXT NOT NULL DEFAULT '',
+	prompt_tokens     INTEGER NOT NULL DEFAULT 0,
+	cached_tokens     INTEGER NOT NULL DEFAULT 0,
+	completion_tokens INTEGER NOT NULL DEFAULT 0,
+	reasoning_tokens  INTEGER NOT NULL DEFAULT 0,
+	total_tokens      INTEGER NOT NULL DEFAULT 0,
+	duration_ms       INTEGER NOT NULL DEFAULT 0,
+	error             TEXT NOT NULL DEFAULT '',
+	created_at        INTEGER NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_minutes_status ON minutes (status, next_attempt_at);
 CREATE INDEX IF NOT EXISTS idx_minutes_user ON minutes (user_id, minute_created_at);
+CREATE INDEX IF NOT EXISTS idx_llm_calls_minute ON llm_calls (minute_id);
 `
 
 // Store 封装数据库连接

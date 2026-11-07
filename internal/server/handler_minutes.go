@@ -42,8 +42,38 @@ type minuteView struct {
 	Reason          string    `json:"reason"`
 	Attempts        int       `json:"attempts"`
 	DocURL          string    `json:"doc_url"`
+	TotalTokens     int64     `json:"total_tokens"`
 	CreatedAt       *string   `json:"created_at"`
 	FinishedAt      *string   `json:"finished_at"`
+}
+
+// llmCallView 是返回给前端的一次模型调用
+type llmCallView struct {
+	ID               int64   `json:"id"`
+	Model            string  `json:"model"`
+	PromptTokens     int64   `json:"prompt_tokens"`
+	CachedTokens     int64   `json:"cached_tokens"`
+	CompletionTokens int64   `json:"completion_tokens"`
+	ReasoningTokens  int64   `json:"reasoning_tokens"`
+	TotalTokens      int64   `json:"total_tokens"`
+	DurationMillis   int64   `json:"duration_ms"`
+	Error            string  `json:"error"`
+	CreatedAt        *string `json:"created_at"`
+}
+
+func newLLMCallView(call *store.LLMCall) llmCallView {
+	return llmCallView{
+		ID:               call.ID,
+		Model:            call.Model,
+		PromptTokens:     call.PromptTokens,
+		CachedTokens:     call.CachedTokens,
+		CompletionTokens: call.CompletionTokens,
+		ReasoningTokens:  call.ReasoningTokens,
+		TotalTokens:      call.TotalTokens,
+		DurationMillis:   call.DurationMillis,
+		Error:            call.Error,
+		CreatedAt:        timeText(call.CreatedAt),
+	}
 }
 
 func newMinuteView(record *store.Minute) minuteView {
@@ -59,6 +89,7 @@ func newMinuteView(record *store.Minute) minuteView {
 		Reason:          record.Reason,
 		Attempts:        record.Attempts,
 		DocURL:          record.DocURL,
+		TotalTokens:     record.TotalTokens,
 		CreatedAt:       timeText(record.CreatedAt),
 		FinishedAt:      timeText(record.FinishedAt),
 	}
@@ -137,18 +168,31 @@ func (s *Server) loadMinute(w http.ResponseWriter, r *http.Request, user *store.
 	return record
 }
 
-// handleMinuteDetail 返回一条记录及其纪要正文
+// handleMinuteDetail 返回一条记录、纪要正文与历次模型调用
 func (s *Server) handleMinuteDetail(w http.ResponseWriter, r *http.Request, user *store.User) {
 	record := s.loadMinute(w, r, user)
 	if record == nil {
 		return
 	}
 
+	calls, err := s.store.LLMCalls(r.Context(), record.ID)
+	if err != nil {
+		writeInternalError(w, err)
+
+		return
+	}
+
+	callViews := make([]llmCallView, 0, len(calls))
+	for _, call := range calls {
+		callViews = append(callViews, newLLMCallView(call))
+	}
+
 	writeJSON(w, http.StatusOK, struct {
 		minuteView
 
-		SummaryMarkdown string `json:"summary_markdown"`
-	}{minuteView: newMinuteView(record), SummaryMarkdown: record.SummaryMarkdown})
+		SummaryMarkdown string        `json:"summary_markdown"`
+		LLMCalls        []llmCallView `json:"llm_calls"`
+	}{minuteView: newMinuteView(record), SummaryMarkdown: record.SummaryMarkdown, LLMCalls: callViews})
 }
 
 // handleMinuteGenerate 把一条记录重新排队生成
@@ -257,6 +301,7 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request, user *store
 		"failed":       stats.Failed,
 		"pending":      stats.Pending,
 		"skipped":      stats.Skipped,
+		"total_tokens": stats.TotalTokens,
 		"last_sync_at": timeText(config.LastSyncAt),
 	})
 }

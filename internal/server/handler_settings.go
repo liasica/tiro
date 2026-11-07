@@ -290,7 +290,7 @@ func (s *Server) handleLLMTest(w http.ResponseWriter, r *http.Request, _ *store.
 
 	var reply string
 
-	reply, err = llm.Chat(ctx, target, "", "这是一次连接测试，只回复「连接正常」四个字")
+	reply, _, err = llm.Chat(ctx, target, "", "这是一次连接测试，只回复「连接正常」四个字")
 	if err != nil {
 		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error()})
 
