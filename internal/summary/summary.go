@@ -74,23 +74,21 @@ func buildUserMessage(input Input) string {
 		_, _ = fmt.Fprintf(&message, "- 时长：%s\n", FormatDuration(input.Duration))
 	}
 
-	message.WriteString("\n# 术语表\n\n")
-	message.WriteString(orPlaceholder(input.Glossary))
-	message.WriteString("\n\n# 飞书自动生成的总结\n\n")
-	message.WriteString(orPlaceholder(input.FeishuSummary))
-	message.WriteString("\n\n# 逐字稿\n\n")
-	message.WriteString(strings.TrimSpace(input.Transcript))
-	message.WriteString("\n")
+	// 术语表与飞书总结为空时整节不给，免得模型在纪要里提到「没有术语表」
+	writeSection(&message, "术语表", input.Glossary)
+	writeSection(&message, "飞书自动生成的总结", input.FeishuSummary)
+	writeSection(&message, "逐字稿", input.Transcript)
 
 	return message.String()
 }
 
-func orPlaceholder(text string) string {
-	if text = strings.TrimSpace(text); text != "" {
-		return text
+// writeSection 追加一个一级标题小节，内容为空时跳过
+func writeSection(message *strings.Builder, title, text string) {
+	if text = strings.TrimSpace(text); text == "" {
+		return
 	}
 
-	return "（无）"
+	_, _ = fmt.Fprintf(message, "\n# %s\n\n%s\n", title, text)
 }
 
 // compose 从模型输出里取出主题与参与人，拼成最终的文档标题与正文
