@@ -20,13 +20,20 @@ type Card struct {
 	ButtonURL  string
 }
 
-// SendCard 以应用身份给用户发一张消息卡片
-func (c *Client) SendCard(ctx context.Context, credential AppCredential, openID string, card Card) error {
-	tenantToken, err := c.TenantToken(ctx, credential)
+// SendText 以应用身份给用户发一条文本消息
+//
+// 文本只有一个云文档链接时，飞书客户端会把它渲染成带标题与正文预览的文档卡片
+func (c *Client) SendText(ctx context.Context, credential AppCredential, openID, text string) error {
+	content, err := json.Marshal(map[string]string{"text": text})
 	if err != nil {
-		return err
+		return fmt.Errorf("编码文本消息失败: %w", err)
 	}
 
+	return c.sendMessage(ctx, credential, openID, "text", content)
+}
+
+// SendCard 以应用身份给用户发一张消息卡片
+func (c *Client) SendCard(ctx context.Context, credential AppCredential, openID string, card Card) error {
 	elements := []map[string]any{
 		{"tag": "markdown", "content": card.Markdown},
 	}
@@ -42,9 +49,7 @@ func (c *Client) SendCard(ctx context.Context, credential AppCredential, openID 
 		})
 	}
 
-	var content []byte
-
-	content, err = json.Marshal(map[string]any{
+	content, err := json.Marshal(map[string]any{
 		"schema": "2.0",
 		"header": map[string]any{
 			"title":    map[string]string{"tag": "plain_text", "content": card.Title},
@@ -54,6 +59,16 @@ func (c *Client) SendCard(ctx context.Context, credential AppCredential, openID 
 	})
 	if err != nil {
 		return fmt.Errorf("编码消息卡片失败: %w", err)
+	}
+
+	return c.sendMessage(ctx, credential, openID, "interactive", content)
+}
+
+// sendMessage 以应用身份给用户私聊发一条消息，content 是按消息类型编码好的内容
+func (c *Client) sendMessage(ctx context.Context, credential AppCredential, openID, messageType string, content []byte) error {
+	tenantToken, err := c.TenantToken(ctx, credential)
+	if err != nil {
+		return err
 	}
 
 	query := url.Values{}
@@ -66,7 +81,7 @@ func (c *Client) SendCard(ctx context.Context, credential AppCredential, openID 
 		query:       query,
 		payload: map[string]string{
 			"receive_id": openID,
-			"msg_type":   "interactive",
+			"msg_type":   messageType,
 			"content":    string(content),
 		},
 	}, nil)

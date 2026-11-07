@@ -187,13 +187,10 @@ func (w *Worker) generate(ctx context.Context, config *store.Config, user *store
 
 	record.DocURL = document.URL
 
-	w.notify(ctx, config, user, feishu.Card{
-		Title:      "会议纪要已生成",
-		Template:   "blue",
-		Markdown:   "**" + record.DocTitle + "**\n" + describe(record),
-		ButtonText: "打开纪要",
-		ButtonURL:  document.URL,
-	})
+	// 只发文档链接，飞书客户端会渲染成带正文预览的文档卡片
+	if err = w.feishu.SendText(ctx, credentialOf(config), user.OpenID, document.URL); err != nil {
+		slog.Warn("发送飞书通知失败", "user", user.Name, "error", err)
+	}
 
 	return nil
 }
@@ -336,21 +333,6 @@ func (w *Worker) notifyFailure(ctx context.Context, config *store.Config, user *
 		ButtonText: "打开妙记",
 		ButtonURL:  record.MinuteURL,
 	})
-}
-
-// describe 写出妙记的开始时间与时长
-func describe(record *store.Minute) string {
-	parts := make([]string, 0, 2)
-
-	if !record.MinuteCreatedAt.IsZero() {
-		parts = append(parts, record.MinuteCreatedAt.Format("2006-01-02 15:04"))
-	}
-
-	if record.DurationSeconds > 0 {
-		parts = append(parts, summary.FormatDuration(time.Duration(record.DurationSeconds)*time.Second))
-	}
-
-	return strings.Join(parts, "，时长 ")
 }
 
 func titleOf(record *store.Minute) string {

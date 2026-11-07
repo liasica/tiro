@@ -5,6 +5,10 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"net/url"
+	"regexp"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,10 +18,24 @@ import (
 //go:embed prompt.md
 var defaultPrompt string
 
-// 模型输出里参与人一行的前缀
-const participantsPrefix = "参与人："
+const (
+	// 模型输出里参与人一行的前缀
+	participantsPrefix = "参与人："
+
+	// 文档标题的前缀
+	titlePrefix = "会议纪要："
+
+	// 飞书文档 Markdown 里会被当成语法的字符
+	markdownSpecials = "\\`*_[]$~<"
+)
 
 var weekdays = [...]string{"周日", "周一", "周二", "周三", "周四", "周五", "周六"}
+
+// 模型输出的节标题，模型漏写主题时不能把它们当成主题
+var sectionNames = []string{"总结", "关键决策", "待办", "风险与卡点", "待确认", "会议章节"}
+
+// chapterLine 匹配以时间开头的章节标题行，例如「03:14 确定接口改版的排期」
+var chapterLine = regexp.MustCompile(`^\*{0,2}((?:\d{1,2}:)?\d{1,2}:\d{2})\*{0,2}[ \t\x{00a0}]+(\S.*)$`)
 
 // DefaultPrompt 返回内置的纪要提示词
 func DefaultPrompt() string {
@@ -39,7 +57,7 @@ type Input struct {
 type Result struct {
 	// Title 是文档标题，由会议主题与日期组成
 	Title string
-	// Markdown 是文档正文，开头带时间、参与人与妙记链接
+	// Markdown 是文档正文，开头是主题、时间与参与人，结尾是妙记链接
 	Markdown string
 }
 
@@ -99,16 +117,25 @@ func compose(input Input, reply string) *Result {
 	topic := strings.TrimSpace(input.Title)
 	participants := ""
 
-	// 主题与参与人只会出现在正文开头，逐行消费直到遇到其他内容
+	topicTaken := false
+
+	// 主题与参与人只会出现在正文开头，逐行消费直到遇到其他内容，节标题也属于其他内容
 	for len(lines) > 0 {
 		line := strings.TrimSpace(lines[0])
 
 		switch {
 		case line == "":
 		case strings.HasPrefix(line, "# "):
-			if heading := strings.TrimSpace(strings.TrimPrefix(line, "# ")); heading != "" {
+			heading := strings.TrimSpace(strings.TrimPrefix(line, "# "))
+			if topicTaken || slices.Contains(sectionNames, heading) {
+				return finish(input, topic, participants, strings.Join(lines, "\n"))
+			}
+
+			if heading != "" {
 				topic = heading
 			}
+
+			topicTaken = true
 		case strings.HasPrefix(line, participantsPrefix):
 			participants = strings.TrimSpace(strings.TrimPrefix(line, participantsPrefix))
 		default:
@@ -123,43 +150,107 @@ func compose(input Input, reply string) *Result {
 
 func finish(input Input, topic, participants, body string) *Result {
 	if topic == "" {
-		topic = "会议纪要"
+		topic = "会议"
 	}
 
-	title := topic
+	title := titlePrefix + topic
 
 	if !input.StartedAt.IsZero() {
-		title += " " + input.StartedAt.Format("2006-01-02")
+		title += " " + input.StartedAt.Format("2006年1月2日")
 	}
 
 	var markdown strings.Builder
 
-	// 头部信息由程序填写，不依赖模型
+	// 头部与尾部信息由程序填写，不依赖模型
+	_, _ = fmt.Fprintf(&markdown, "> 会议主题：%s\n", escapeMarkdown(topic))
+
 	if !input.StartedAt.IsZero() {
-		startedAt := input.StartedAt.Format("2006-01-02 15:04")
-
-		_, _ = fmt.Fprintf(&markdown, "> 时间：%s（%s）", startedAt, weekdays[input.StartedAt.Weekday()])
-
-		if input.Duration > 0 {
-			_, _ = fmt.Fprintf(&markdown, "，时长 %s", FormatDuration(input.Duration))
-		}
-
-		markdown.WriteString("\n>\n")
+		_, _ = fmt.Fprintf(&markdown, "> 会议时间：%s\n", meetingTime(input.StartedAt, input.Duration))
 	}
 
 	if participants != "" {
-		_, _ = fmt.Fprintf(&markdown, "> 参与人：%s\n>\n", participants)
+		_, _ = fmt.Fprintf(&markdown, "> 参与人：%s\n", participants)
 	}
+
+	markdown.WriteString("\n")
+	markdown.WriteString(linkChapters(strings.TrimSpace(body), input.MinuteURL))
+	markdown.WriteString("\n")
 
 	if input.MinuteURL != "" {
-		_, _ = fmt.Fprintf(&markdown, "> 妙记：[%s](%s)\n", orTitle(input.Title), input.MinuteURL)
+		_, _ = fmt.Fprintf(&markdown, "\n# 相关链接\n\n- 妙记：[%s](%s)\n", escapeMarkdown(orTitle(input.Title)), input.MinuteURL)
 	}
 
-	markdown.WriteString("\n")
-	markdown.WriteString(strings.TrimSpace(body))
-	markdown.WriteString("\n")
-
 	return &Result{Title: title, Markdown: markdown.String()}
+}
+
+// meetingTime 写出会议的日期与起止时间，例如「2026年10月12日（周一）14:02 - 14:21（GMT+08）」
+func meetingTime(startedAt time.Time, duration time.Duration) string {
+	text := startedAt.Format("2006年1月2日") + "（" + weekdays[startedAt.Weekday()] + "）" + startedAt.Format("15:04")
+
+	if duration > 0 {
+		text += " - " + startedAt.Add(duration).Format("15:04")
+	}
+
+	return text + "（GMT" + startedAt.Format("-07") + "）"
+}
+
+// linkChapters 把章节标题行开头的时间换成跳到妙记对应位置的链接，并把标题加粗
+//
+// 时间与标题之间用不换行空格连接，普通空格会被飞书文档吞掉
+func linkChapters(body, minuteURL string) string {
+	lines := strings.Split(body, "\n")
+
+	for i, line := range lines {
+		match := chapterLine.FindStringSubmatch(line)
+		if match == nil {
+			continue
+		}
+
+		stamp, heading := match[1], strings.TrimSpace(strings.Trim(match[2], "*"))
+		if heading == "" {
+			continue
+		}
+
+		if link := timestampURL(minuteURL, stamp); link != "" {
+			stamp = "[" + stamp + "](" + link + ")"
+		}
+
+		lines[i] = stamp + " **" + heading + "**"
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+// timestampURL 返回定位到某个时间的妙记链接，妙记链接为空或时间不合法时返回空串
+func timestampURL(minuteURL, stamp string) string {
+	if minuteURL == "" {
+		return ""
+	}
+
+	parsed, err := url.Parse(minuteURL)
+	if err != nil {
+		return ""
+	}
+
+	seconds := 0
+
+	for part := range strings.SplitSeq(stamp, ":") {
+		var value int
+
+		value, err = strconv.Atoi(part)
+		if err != nil {
+			return ""
+		}
+
+		seconds = seconds*60 + value
+	}
+
+	// 妙记链接的 t 参数是毫秒
+	query := parsed.Query()
+	query.Set("t", strconv.Itoa(seconds*1000))
+	parsed.RawQuery = query.Encode()
+
+	return parsed.String()
 }
 
 func orTitle(title string) string {
@@ -205,4 +296,19 @@ func FormatDuration(duration time.Duration) string {
 	}
 
 	return strings.Join(parts, " ")
+}
+
+// escapeMarkdown 转义会被飞书文档 Markdown 当成语法的字符，用于程序填写的纯文本
+func escapeMarkdown(text string) string {
+	var escaped strings.Builder
+
+	for _, char := range text {
+		if strings.ContainsRune(markdownSpecials, char) {
+			escaped.WriteByte('\\')
+		}
+
+		escaped.WriteRune(char)
+	}
+
+	return escaped.String()
 }
