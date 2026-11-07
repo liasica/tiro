@@ -89,12 +89,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/auth/logout", s.handleLogout)
 	mux.HandleFunc("GET /api/flows/{id}", s.handleFlow)
 
+	// 成员只能查看自己的纪要，手动添加、重新生成与设置、成员管理都只有管理员可用
 	mux.HandleFunc("GET /api/minutes", s.withUser(s.handleMinuteList))
-	mux.HandleFunc("POST /api/minutes", s.withUser(s.handleMinuteAdd))
 	mux.HandleFunc("GET /api/minutes/{id}", s.withUser(s.handleMinuteDetail))
-	mux.HandleFunc("POST /api/minutes/{id}/generate", s.withUser(s.handleMinuteGenerate))
 	mux.HandleFunc("GET /api/stats", s.withUser(s.handleStats))
 
+	mux.HandleFunc("POST /api/minutes", s.withAdmin(s.handleMinuteAdd))
+	mux.HandleFunc("POST /api/minutes/{id}/generate", s.withAdmin(s.handleMinuteGenerate))
 	mux.HandleFunc("GET /api/settings", s.withAdmin(s.handleSettingsGet))
 	mux.HandleFunc("PUT /api/settings", s.withAdmin(s.handleSettingsPut))
 	mux.HandleFunc("POST /api/settings/llm/test", s.withAdmin(s.handleLLMTest))

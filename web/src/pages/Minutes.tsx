@@ -60,14 +60,15 @@ export function Minutes({ admin }: { admin: boolean }) {
 
   const total = list.data?.total ?? 0
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  const columns = admin ? 6 : 5
 
   return (
     <div>
       <PageHeader
         title="纪要"
         actions={
-          <>
-            {admin && (
+          admin && (
+            <>
               <Segmented<Scope>
                 value={scope}
                 onChange={(v) => update({ scope: v, page: '1' })}
@@ -76,12 +77,12 @@ export function Minutes({ admin }: { admin: boolean }) {
                   { value: 'all', label: '全部成员' },
                 ]}
               />
-            )}
-            <Button variant="primary" onClick={() => setAdding(true)}>
-              <Plus className="size-4" />
-              添加妙记
-            </Button>
-          </>
+              <Button variant="primary" onClick={() => setAdding(true)}>
+                <Plus className="size-4" />
+                添加妙记
+              </Button>
+            </>
+          )
         }
       />
 
@@ -103,25 +104,27 @@ export function Minutes({ admin }: { admin: boolean }) {
               <th className="hidden w-28 px-4 py-2.5 font-normal lg:table-cell">时长</th>
               <th className="w-24 px-4 py-2.5 font-normal sm:w-44">状态</th>
               <th className="hidden w-20 px-4 py-2.5 font-normal sm:table-cell">纪要</th>
-              <th className="w-14 px-2 py-2.5 sm:w-28 sm:px-4">
-                <span className="sr-only">操作</span>
-              </th>
+              {admin && (
+                <th className="w-14 px-2 py-2.5 sm:w-28 sm:px-4">
+                  <span className="sr-only">操作</span>
+                </th>
+              )}
             </tr>
           </thead>
           <tbody>
             {list.isPending && (
               <tr>
-                <td colSpan={6} className="py-16 text-center">
+                <td colSpan={columns} className="py-16 text-center">
                   <Spinner className="mx-auto" />
                 </td>
               </tr>
             )}
             {list.data?.items.map((r) => (
-              <Row key={r.id} record={r} showOwner={scope === 'all'} onOpen={() => setOpenId(r.id)} />
+              <Row key={r.id} record={r} admin={admin} showOwner={scope === 'all'} onOpen={() => setOpenId(r.id)} />
             ))}
             {list.data && list.data.items.length === 0 && (
               <tr>
-                <td colSpan={6} className="py-16 text-center text-sm text-muted">
+                <td colSpan={columns} className="py-16 text-center text-sm text-muted">
                   {status ? '没有符合条件的记录' : '暂无记录'}
                 </td>
               </tr>
@@ -149,10 +152,10 @@ export function Minutes({ admin }: { admin: boolean }) {
 
       {openId !== null && (
         <Suspense fallback={null}>
-          <MinuteDrawer id={openId} onClose={() => setOpenId(null)} />
+          <MinuteDrawer id={openId} admin={admin} onClose={() => setOpenId(null)} />
         </Suspense>
       )}
-      {adding && <AddMinute onClose={() => setAdding(false)} onAdded={(r) => setOpenId(r.id)} />}
+      {admin && adding && <AddMinute onClose={() => setAdding(false)} onAdded={(r) => setOpenId(r.id)} />}
     </div>
   )
 }
@@ -181,7 +184,7 @@ function StatsStrip({ stats }: { stats?: Stats }) {
   )
 }
 
-function Row({ record: r, showOwner, onOpen }: { record: MinuteRecord; showOwner: boolean; onOpen: () => void }) {
+function Row({ record: r, admin, showOwner, onOpen }: { record: MinuteRecord; admin: boolean; showOwner: boolean; onOpen: () => void }) {
   const qc = useQueryClient()
   const toast = useToast()
   const gen = useMutation({
@@ -240,12 +243,14 @@ function Row({ record: r, showOwner, onOpen }: { record: MinuteRecord; showOwner
           <span className="text-faint">—</span>
         )}
       </td>
-      <td className="px-2 py-3 text-right sm:px-4" onClick={stop}>
-        <Button size="sm" variant="ghost" disabled={running} loading={gen.isPending} onClick={() => gen.mutate()} title={generateLabel(r.status)}>
-          {!gen.isPending && <RotateCw className="size-3.5" />}
-          <span className="hidden sm:inline">{generateLabel(r.status)}</span>
-        </Button>
-      </td>
+      {admin && (
+        <td className="px-2 py-3 text-right sm:px-4" onClick={stop}>
+          <Button size="sm" variant="ghost" disabled={running} loading={gen.isPending} onClick={() => gen.mutate()} title={generateLabel(r.status)}>
+            {!gen.isPending && <RotateCw className="size-3.5" />}
+            <span className="hidden sm:inline">{generateLabel(r.status)}</span>
+          </Button>
+        </td>
+      )}
     </tr>
   )
 }

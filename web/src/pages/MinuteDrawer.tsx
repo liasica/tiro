@@ -10,7 +10,7 @@ import { useToast } from '../lib/toast'
 import { cx, generateLabel } from '../lib/ui'
 
 // 纪要详情抽屉
-export function MinuteDrawer({ id, onClose }: { id: number; onClose: () => void }) {
+export function MinuteDrawer({ id, admin, onClose }: { id: number; admin: boolean; onClose: () => void }) {
   const qc = useQueryClient()
   const toast = useToast()
   const q = useQuery({
@@ -71,10 +71,12 @@ export function MinuteDrawer({ id, onClose }: { id: number; onClose: () => void 
                 <ExternalLink className="size-4" />
                 打开妙记
               </LinkButton>
-              <Button onClick={() => gen.mutate()} loading={gen.isPending} disabled={running}>
-                {!gen.isPending && <RotateCw className="size-4" />}
-                {generateLabel(r.status)}
-              </Button>
+              {admin && (
+                <Button onClick={() => gen.mutate()} loading={gen.isPending} disabled={running}>
+                  {!gen.isPending && <RotateCw className="size-4" />}
+                  {generateLabel(r.status)}
+                </Button>
+              )}
             </div>
 
             <dl className="mt-6 grid grid-cols-1 gap-x-8 gap-y-3 text-[13px] sm:grid-cols-2">

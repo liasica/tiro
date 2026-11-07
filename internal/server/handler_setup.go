@@ -71,7 +71,12 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 		Version string    `json:"version"`
 		AppID   string    `json:"app_id"`
 		User    *userView `json:"user"`
-	}{Stage: stage, Version: s.version, AppID: config.AppID}
+	}{Stage: stage, Version: s.version}
+
+	// 应用 ID 只在授权这一步展示，初始化完成后从设置页查看
+	if stage == stageAuth {
+		state.AppID = config.AppID
+	}
 
 	if user := s.currentUser(r); user != nil {
 		state.User = &userView{
