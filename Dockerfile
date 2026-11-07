@@ -1,7 +1,8 @@
 # 前端构建
-FROM node:24-alpine AS web
+FROM node:26-alpine AS web
 WORKDIR /build
-RUN corepack enable
+# pnpm 按 package.json 的 packageManager 切换到项目固定的版本
+RUN npm install -g pnpm
 COPY web/package.json web/pnpm-lock.yaml ./web/
 RUN cd web && pnpm install --frozen-lockfile
 COPY web/ ./web/
@@ -18,7 +19,7 @@ ARG VERSION=dev
 RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /out/tiro ./cmd/tiro
 
 # 运行镜像
-FROM alpine:3.22
+FROM alpine:3.24
 RUN apk add --no-cache ca-certificates tzdata && \
     adduser -D -u 10001 tiro && \
     mkdir -p /data && chown tiro /data
