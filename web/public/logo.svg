@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" fill="none" role="img" aria-labelledby="tiro-title tiro-description">
+  <title id="tiro-title">Tiro</title>
+  <desc id="tiro-description">蓝青色折页组成的提洛速记符号</desc>
+  <defs>
+    <linearGradient id="tiro-wing" x1="42" y1="60" x2="196" y2="108" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4B88FF"/>
+      <stop offset="1" stop-color="#3558EB"/>
+    </linearGradient>
+    <linearGradient id="tiro-stem" x1="160" y1="108" x2="69" y2="205" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#3655E8"/>
+      <stop offset="1" stop-color="#4C79FA"/>
+    </linearGradient>
+    <linearGradient id="tiro-page" x1="137" y1="51" x2="216" y2="93" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#24D4BD"/>
+      <stop offset="1" stop-color="#12B7D0"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#tiro-wing)" d="M44 57H198C205 57 209 64 205 70L185 101H74C66 101 60 98 56 92L37 68C33 63 37 57 44 57Z"/>
+  <path fill="url(#tiro-stem)" d="M121 109H169L113 196C109 202 103 205 96 205H64C57 205 54 198 58 192L111 115C114 111 117 109 121 109Z"/>
+  <path fill="url(#tiro-page)" d="M136 48H217C224 48 228 55 224 61L204 92H165Z"/>
+</svg>

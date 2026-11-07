@@ -4,14 +4,12 @@ import { createPortal } from 'react-dom'
 import type { RecordStatus } from '../lib/api'
 import { buttonClass, cx, inputClass, statusMeta, type ButtonVariant } from '../lib/ui'
 
-// 文字标识：衬线斜体 tiro，前缀提洛速记符号「⁊」
+// 文字标识：Tiro 标志加衬线斜体 tiro
 export function Wordmark({ size = 'md' }: { size?: 'md' | 'lg' }) {
   const lg = size === 'lg'
   return (
-    <span className={cx('inline-flex items-baseline select-none', lg ? 'gap-2' : 'gap-1')} aria-label="tiro">
-      <svg viewBox="0 0 14 16" className={cx('self-end text-accent', lg ? 'mb-[7px] h-[22px] w-[19px]' : 'mb-[4px] h-[13px] w-[11px]')} aria-hidden>
-        <path d="M2 2.5h10L6.5 14" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
+    <span className={cx('inline-flex items-center select-none', lg ? 'gap-1.5' : 'gap-1')} aria-label="tiro">
+      <img src="/logo.svg" alt="" className={lg ? 'size-[56px]' : 'size-[34px]'} draggable={false} />
       <span className={cx('font-serif italic leading-none tracking-tight text-text', lg ? 'text-[44px]' : 'text-[26px]')}>tiro</span>
     </span>
   )
