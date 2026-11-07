@@ -6,7 +6,7 @@ Tiro 定时检查授权用户名下的新妙记，取回逐字稿，交给 OpenA
 
 ## 运行
 
-需要 Go 1.27、Node 24 与 pnpm。
+需要 Go 1.27、Node 26 与 pnpm 12。
 
 ```bash
 make all
@@ -80,3 +80,7 @@ make lint
 ```
 
 项目约束与飞书接口的实测结论见 [AGENTS.md](AGENTS.md)。
+
+## 许可证
+
+[MIT](LICENSE)
