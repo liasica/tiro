@@ -8,7 +8,9 @@
         TIRO_DATA_DIR=/tmp/tiro-dev ./bin/tiro
 
 扫码步骤用 GET /control?approve_app=1 与 /control?approve_auth=1 模拟确认，
-fail_llm、fail_doc、fail_refresh 置 1 可以模拟对应环节出错，hang_doc 置 1 让建文档的异步任务一直停在处理中
+fail_llm、fail_doc、fail_refresh 置 1 可以模拟对应环节出错，hang_doc 置 1 让建文档的异步任务一直停在处理中，
+deny_oauth 置 1 模拟用户在网页授权页拒绝
+网页授权页直接带着授权码跳回 redirect_uri；浏览器 UA 里带上 Lark/ 即可模拟在飞书客户端内打开后台
 后台里的模型接口地址填 http://127.0.0.1:8477/v1
 """
 import json
@@ -31,6 +33,7 @@ state = {
     "fail_doc": False,
     "fail_refresh": False,
     "hang_doc": False,
+    "deny_oauth": False,
 }
 
 MINUTES = {
@@ -130,6 +133,15 @@ class Handler(BaseHTTPRequestHandler):
                     state[key] = value == "1"
             return self.reply(state)
 
+        if path == "/open-apis/authen/v1/authorize":
+            log("authorize", query)
+            result = {"error": "access_denied"} if state["deny_oauth"] else {"code": "c-fake-oauth"}
+            result["state"] = query.get("state", "")
+            self.send_response(302)
+            self.send_header("Location", query["redirect_uri"] + "?" + urllib.parse.urlencode(result))
+            self.end_headers()
+            return
+
         if path == "/open-apis/authen/v1/user_info":
             return self.reply({"code": 0, "data": {"open_id": "ou_fake_user", "name": "测试用户", "avatar_url": ""}})
 
@@ -180,6 +192,12 @@ class Handler(BaseHTTPRequestHandler):
                 log("refresh", {"refresh_token": body.get("refresh_token")})
                 return self.reply({"access_token": f"u-fake-r{state['refresh_count']}", "refresh_token": f"r-fake-{state['refresh_count']}",
                                    "expires_in": 7200, "refresh_token_expires_in": 604800, "token_type": "Bearer"})
+            if body.get("grant_type") == "authorization_code":
+                log("authorization_code", {"code": body.get("code"), "redirect_uri": body.get("redirect_uri")})
+                if body.get("code") != "c-fake-oauth":
+                    return self.reply({"code": 20003, "error": "invalid_grant", "error_description": "code is invalid"}, 400)
+                return self.reply({"code": 0, "access_token": "u-fake-oauth", "refresh_token": "r-fake-oauth", "expires_in": 7200,
+                                   "refresh_token_expires_in": 604800, "token_type": "Bearer"})
             if not state["approve_auth"]:
                 return self.reply({"error": "authorization_pending"}, 400)
             return self.reply({"access_token": "u-fake-0", "refresh_token": "r-fake-0", "expires_in": 7200,

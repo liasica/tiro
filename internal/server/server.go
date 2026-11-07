@@ -87,6 +87,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/setup/app/manual", s.handleAppManual)
 	mux.HandleFunc("POST /api/auth/begin", s.handleAuthBegin)
 	mux.HandleFunc("POST /api/auth/logout", s.handleLogout)
+	mux.HandleFunc("GET "+oauthPath, s.handleOAuthBegin)
+	mux.HandleFunc("GET "+oauthCallbackPath, s.handleOAuthCallback)
 	mux.HandleFunc("GET /api/flows/{id}", s.handleFlow)
 
 	// 成员只能查看自己的纪要，手动添加、重新生成与设置、成员管理都只有管理员可用

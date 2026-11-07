@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Copy, ExternalLink } from 'lucide-react'
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { LlmForm } from '../components/LlmForm'
-import { Button, ErrorLine, Field, Input, PageHeader, Spinner, Textarea } from '../components/ui'
+import { Button, ErrorLine, Field, Input, LinkButton, PageHeader, Spinner, Textarea } from '../components/ui'
 import type { Settings, SettingsPatch } from '../lib/api'
 import { api } from '../lib/api'
 import { useToast } from '../lib/toast'
@@ -48,6 +49,9 @@ export function SettingsPage() {
                 <dd className={q.data.feishu.app_secret_set ? 'text-ok' : 'text-err'}>{q.data.feishu.app_secret_set ? '已保存' : '未保存'}</dd>
               </div>
             </dl>
+          </Section>
+          <Section title="机器人菜单" desc="在机器人私聊里点击菜单打开纪要页，飞书内打开时自动登录。">
+            <MenuGuide appId={q.data.feishu.app_id} />
           </Section>
         </div>
       )}
@@ -176,5 +180,61 @@ function PromptForm({ settings, onSaved }: { settings: Settings; onSaved: (s: Se
         }
       />
     </form>
+  )
+}
+
+// 机器人菜单的配置步骤，链接按当前访问的地址生成
+function MenuGuide({ appId }: { appId: string }) {
+  const page = `${location.origin}/`
+  const links = [
+    { label: '重定向 URL', value: `${location.origin}/api/auth/feishu/callback` },
+    { label: '菜单链接', value: page },
+    { label: '桌面端链接', value: `https://applink.feishu.cn/client/web_url/open?mode=sidebar-semi&url=${encodeURIComponent(page)}` },
+  ]
+
+  return (
+    <div className="space-y-5">
+      <ol className="list-decimal space-y-1.5 pl-5 text-[13px] leading-relaxed text-muted">
+        <li>在开发者后台「安全设置」的重定向 URL 中添加下方的重定向 URL</li>
+        <li>在「机器人」页开启机器人自定义菜单，添加菜单项，响应动作选「跳转至指定链接」并填写菜单链接；桌面端填写桌面端链接时，页面在聊天侧边栏打开</li>
+        <li>创建版本并发布，约 5 分钟后菜单出现在机器人私聊的输入框旁</li>
+      </ol>
+      <dl className="space-y-3">
+        {links.map((link) => (
+          <CopyRow key={link.label} label={link.label} value={link.value} />
+        ))}
+      </dl>
+      {appId && (
+        <LinkButton href={`https://open.feishu.cn/app/${appId}`}>
+          <ExternalLink className="size-4" />
+          打开开发者后台
+        </LinkButton>
+      )}
+    </div>
+  )
+}
+
+function CopyRow({ label, value }: { label: string; value: string }) {
+  const toast = useToast()
+  // 非 HTTPS 页面里没有剪贴板接口，访问时抛错同样按复制失败处理
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(value)
+      toast('已复制')
+    } catch {
+      toast('复制失败，请手动选择复制', 'err')
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-4">
+      <dt className="w-24 shrink-0 text-[13px] text-muted">{label}</dt>
+      <dd className="flex min-w-0 flex-1 items-center gap-2">
+        <code className="min-w-0 flex-1 rounded-md border border-line bg-bg px-2.5 py-1.5 text-xs break-all select-all">{value}</code>
+        <Button size="sm" variant="ghost" onClick={copy} title="复制" aria-label={`复制${label}`}>
+          <Copy className="size-3.5" />
+        </Button>
+      </dd>
+    </div>
   )
 }

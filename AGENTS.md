@@ -27,7 +27,7 @@ Tiro 把飞书妙记自动整理成会议纪要：发现授权用户名下新生
 - 飞书应用凭据、用户令牌、模型接口密钥以明文存在数据库里，数据目录不入库，接口只返回「是否已设置」
 - 应用未配置时，创建应用的接口不需要登录；库里没有用户时，第一个扫码授权的人成为管理员
 - 管理员统一配置飞书应用、模型接口与运行参数，管理成员，可查看全部成员的纪要，可手动添加妙记与重新生成；普通成员的妙记自动生成纪要，只能查看自己的纪要，看不到设置、成员列表与他人的纪要
-- 登录只有飞书扫码一条路，授权即登录，会话是签名 cookie，签名密钥首次启动时生成并存库
+- 登录只走飞书授权，授权即登录：浏览器里扫码，飞书客户端内打开时自动跳转网页授权；会话是签名 cookie，签名密钥首次启动时生成并存库
 
 ## 初始化与授权
 
@@ -38,6 +38,14 @@ Tiro 把飞书妙记自动整理成会议纪要：发现授权用户名下新生
 - 令牌续期：`POST /oauth/v3/token`，JSON 请求体，`grant_type=refresh_token`。刷新令牌只能用一次，续期必须串行并立即落库；刷新令牌有效期 7 天，服务持续运行就不会过期
 - 续期被拒绝时把用户标成授权失效并私聊通知，重新扫码登录后恢复
 - 授权时申请的权限定义在 `internal/feishu/oauth.go` 的 `UserScopes`
+- 飞书内免登：`GET https://accounts.feishu.cn/open-apis/authen/v1/authorize` 网页授权页，参数 `client_id`、`response_type=code`、`redirect_uri`、`scope`、`state`；回调 `/api/auth/feishu/callback` 后用 `POST /oauth/v3/token`，JSON 请求体，`grant_type=authorization_code` 换令牌，与扫码授权一样保存用户与令牌
+- `redirect_uri` 按请求的主机与 `X-Forwarded-Proto`、`X-Forwarded-Host` 还原，必须先加到开发者后台「安全设置」的重定向 URL 里；授权失败时回到 `/?login_error=…`，登录页据此停止自动跳转
+
+## 机器人菜单
+
+- 菜单没有开放接口，只能在开发者后台「机器人」页的机器人自定义菜单里配置，响应动作选跳转至指定链接，发布版本后生效，仅单聊可见
+- 菜单链接指向后台首页；桌面端可改用 `https://applink.feishu.cn/client/web_url/open?mode=sidebar-semi&url=…` 在聊天侧边栏打开
+- 设置页按当前访问地址给出重定向 URL、菜单链接与桌面端链接
 
 ## 飞书接口
 

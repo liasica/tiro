@@ -206,31 +206,41 @@ func (s *Server) pollAuthorization(credential feishu.AppCredential, deviceCode s
 			return 0, err
 		}
 
-		var info *feishu.UserInfo
-
-		info, err = s.feishu.UserInfo(ctx, token.AccessToken)
-		if err != nil {
-			return 0, err
-		}
-
 		var user *store.User
 
-		user, err = s.store.SaveAuthorizedUser(ctx, &store.User{
-			OpenID:           info.OpenID,
-			Name:             info.Name,
-			AvatarURL:        info.AvatarURL,
-			AccessToken:      token.AccessToken,
-			RefreshToken:     token.RefreshToken,
-			AccessExpiresAt:  token.AccessExpiresAt,
-			RefreshExpiresAt: token.RefreshExpiresAt,
-		})
+		user, err = s.saveAuthorization(ctx, token)
 		if err != nil {
 			return 0, err
 		}
-
-		slog.Info("用户已授权", "name", user.Name, "role", user.Role)
-		s.worker.RequestSync()
 
 		return user.ID, nil
 	}
+}
+
+// saveAuthorization 按令牌取回用户资料，保存用户与令牌并立即检查一次新妙记
+func (s *Server) saveAuthorization(ctx context.Context, token *feishu.Token) (*store.User, error) {
+	info, err := s.feishu.UserInfo(ctx, token.AccessToken)
+	if err != nil {
+		return nil, err
+	}
+
+	var user *store.User
+
+	user, err = s.store.SaveAuthorizedUser(ctx, &store.User{
+		OpenID:           info.OpenID,
+		Name:             info.Name,
+		AvatarURL:        info.AvatarURL,
+		AccessToken:      token.AccessToken,
+		RefreshToken:     token.RefreshToken,
+		AccessExpiresAt:  token.AccessExpiresAt,
+		RefreshExpiresAt: token.RefreshExpiresAt,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	slog.Info("用户已授权", "name", user.Name, "role", user.Role)
+	s.worker.RequestSync()
+
+	return user, nil
 }

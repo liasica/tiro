@@ -14,6 +14,7 @@ const (
 	pathAppRegistration     = "/oauth/v1/app/registration"
 	pathDeviceAuthorization = "/oauth/v1/device_authorization"
 	pathOAuthToken          = "/oauth/v3/token"
+	pathAuthorize           = "/open-apis/authen/v1/authorize"
 
 	// 扫码建应用页面链接里的版本号参数，取值与飞书官方命令行工具一致
 	registrationClientVersion = "1.0.99"
@@ -180,6 +181,36 @@ func (c *Client) PollDeviceToken(ctx context.Context, credential AppCredential, 
 	data, err := c.oauthForm(ctx, pathOAuthToken, form, "")
 	if err != nil {
 		return nil, translateFlowError(err)
+	}
+
+	return tokenFromResponse(data)
+}
+
+// AuthorizeURL 返回网页授权页面的地址，用户同意后飞书带着授权码与 state 跳回 redirectURI
+//
+// 在飞书客户端内打开时，已授予过这些权限的用户不需要再确认
+func (c *Client) AuthorizeURL(appID, redirectURI, state string) string {
+	query := url.Values{}
+	query.Set("client_id", appID)
+	query.Set("response_type", "code")
+	query.Set("redirect_uri", redirectURI)
+	query.Set("scope", strings.Join(UserScopes, " "))
+	query.Set("state", state)
+
+	return c.accountsBase + pathAuthorize + "?" + query.Encode()
+}
+
+// ExchangeCode 用网页授权拿到的授权码换取令牌，redirectURI 必须与发起授权时一致
+func (c *Client) ExchangeCode(ctx context.Context, credential AppCredential, code, redirectURI string) (*Token, error) {
+	data, err := c.oauthJSON(ctx, pathOAuthToken, map[string]string{
+		"grant_type":    "authorization_code",
+		"code":          code,
+		"redirect_uri":  redirectURI,
+		"client_id":     credential.AppID,
+		"client_secret": credential.AppSecret,
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return tokenFromResponse(data)
