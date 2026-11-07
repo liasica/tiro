@@ -28,7 +28,7 @@ export function buttonClass(variant: ButtonVariant, size: 'sm' | 'md', className
   return cx(
     'inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg font-medium whitespace-nowrap transition-[background-color,border-color,color,box-shadow] duration-150 disabled:cursor-not-allowed disabled:opacity-45',
     size === 'sm' ? 'h-7 px-2.5 text-[13px]' : 'h-9 px-3.5 text-sm',
-    variant === 'primary' && 'bg-accent text-on-accent shadow-[0_0_0_1px_var(--accent),0_6px_20px_-8px_var(--glow)] hover:bg-accent-strong',
+    variant === 'primary' && 'border border-accent bg-accent text-on-accent hover:border-accent-strong hover:bg-accent-strong',
     variant === 'secondary' && 'border border-line-strong bg-surface text-text hover:border-accent/50 hover:bg-raised',
     variant === 'ghost' && 'text-muted hover:bg-raised hover:text-text',
     variant === 'danger' && 'border border-line-strong text-err hover:border-err/50 hover:bg-err/10',
