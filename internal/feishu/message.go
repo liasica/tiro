@@ -29,7 +29,9 @@ func (c *Client) SendText(ctx context.Context, credential AppCredential, openID,
 		return fmt.Errorf("编码文本消息失败: %w", err)
 	}
 
-	return c.sendMessage(ctx, credential, openID, "text", content)
+	_, err = c.sendMessage(ctx, credential, openID, "text", content)
+
+	return err
 }
 
 // SendCard 以应用身份给用户发一张消息卡片
@@ -61,20 +63,57 @@ func (c *Client) SendCard(ctx context.Context, credential AppCredential, openID 
 		return fmt.Errorf("编码消息卡片失败: %w", err)
 	}
 
+	_, err = c.sendMessage(ctx, credential, openID, "interactive", content)
+
+	return err
+}
+
+// SendRawCard 以应用身份给用户私聊发一张卡片，card 是完整的卡片结构，返回消息 ID
+func (c *Client) SendRawCard(ctx context.Context, credential AppCredential, openID string, card any) (string, error) {
+	content, err := json.Marshal(card)
+	if err != nil {
+		return "", fmt.Errorf("编码消息卡片失败: %w", err)
+	}
+
 	return c.sendMessage(ctx, credential, openID, "interactive", content)
 }
 
-// sendMessage 以应用身份给用户私聊发一条消息，content 是按消息类型编码好的内容
-func (c *Client) sendMessage(ctx context.Context, credential AppCredential, openID, messageType string, content []byte) error {
+// UpdateCard 以应用身份更新已发出的卡片，卡片需要声明 update_multi
+func (c *Client) UpdateCard(ctx context.Context, credential AppCredential, messageID string, card any) error {
+	content, err := json.Marshal(card)
+	if err != nil {
+		return fmt.Errorf("编码消息卡片失败: %w", err)
+	}
+
+	var tenantToken string
+
+	if tenantToken, err = c.TenantToken(ctx, credential); err != nil {
+		return err
+	}
+
+	return c.openAPI(ctx, apiRequest{
+		method:      http.MethodPatch,
+		path:        "/open-apis/im/v1/messages/" + url.PathEscape(messageID),
+		accessToken: tenantToken,
+		payload:     map[string]string{"content": string(content)},
+	}, nil)
+}
+
+// sendMessage 以应用身份给用户私聊发一条消息，content 是按消息类型编码好的内容，返回消息 ID
+func (c *Client) sendMessage(ctx context.Context, credential AppCredential, openID, messageType string, content []byte) (string, error) {
 	tenantToken, err := c.TenantToken(ctx, credential)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	query := url.Values{}
 	query.Set("receive_id_type", "open_id")
 
-	return c.openAPI(ctx, apiRequest{
+	var result struct {
+		MessageID string `json:"message_id"`
+	}
+
+	err = c.openAPI(ctx, apiRequest{
 		method:      http.MethodPost,
 		path:        "/open-apis/im/v1/messages",
 		accessToken: tenantToken,
@@ -84,7 +123,9 @@ func (c *Client) sendMessage(ctx context.Context, credential AppCredential, open
 			"msg_type":   messageType,
 			"content":    string(content),
 		},
-	}, nil)
+	}, &result)
+
+	return result.MessageID, err
 }
 
 // tenantTokenRequest 用应用凭据换取应用身份的访问令牌

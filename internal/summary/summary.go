@@ -217,7 +217,7 @@ func linkChapters(body, minuteURL string) string {
 			continue
 		}
 
-		if link := timestampURL(minuteURL, stamp); link != "" {
+		if link := TimestampURL(minuteURL, stamp); link != "" {
 			stamp = "[" + stamp + "](" + link + ")"
 		}
 
@@ -227,8 +227,8 @@ func linkChapters(body, minuteURL string) string {
 	return strings.Join(lines, "\n")
 }
 
-// timestampURL 返回定位到某个时间的妙记链接，妙记链接为空或时间不合法时返回空串
-func timestampURL(minuteURL, stamp string) string {
+// TimestampURL 返回定位到某个时间的妙记链接，妙记链接为空或时间不合法时返回空串
+func TimestampURL(minuteURL, stamp string) string {
 	if minuteURL == "" {
 		return ""
 	}

@@ -1,4 +1,4 @@
-// Package store 负责 SQLite 持久化，保存设置、授权用户与妙记处理记录
+// Package store 负责 SQLite 持久化，保存设置、授权用户、妙记处理记录与对话
 package store
 
 import (
@@ -32,6 +32,8 @@ const (
 	KeyGlossary           = "glossary"
 	KeyPrompt             = "prompt"
 	KeyLastSyncAt         = "last_sync_at"
+	KeyChatProviders      = "chat_providers"
+	KeyChatDefaultModel   = "chat_default_model"
 )
 
 const schema = `
@@ -93,9 +95,50 @@ CREATE TABLE IF NOT EXISTS llm_calls (
 	created_at        INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS chats (
+	id         INTEGER PRIMARY KEY AUTOINCREMENT,
+	user_id    INTEGER NOT NULL REFERENCES users(id),
+	source     TEXT NOT NULL DEFAULT 'web',
+	title      TEXT NOT NULL DEFAULT '',
+	context    TEXT NOT NULL DEFAULT '{}',
+	model_id   TEXT NOT NULL DEFAULT '',
+	ended_at   INTEGER NOT NULL DEFAULT 0,
+	created_at INTEGER NOT NULL,
+	updated_at INTEGER NOT NULL,
+	bitable_token        TEXT NOT NULL DEFAULT '',
+	bitable_url          TEXT NOT NULL DEFAULT '',
+	bitable_qa_table     TEXT NOT NULL DEFAULT '',
+	bitable_minute_table TEXT NOT NULL DEFAULT '',
+	bitable_minutes      TEXT NOT NULL DEFAULT '{}',
+	bitable_spare_table  TEXT NOT NULL DEFAULT '',
+	bitable_linked       INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS chat_messages (
+	id                INTEGER PRIMARY KEY AUTOINCREMENT,
+	chat_id           INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+	role              TEXT NOT NULL,
+	content           TEXT NOT NULL DEFAULT '',
+	steps             TEXT NOT NULL DEFAULT '[]',
+	sources           TEXT NOT NULL DEFAULT '[]',
+	model             TEXT NOT NULL DEFAULT '',
+	prompt_tokens     INTEGER NOT NULL DEFAULT 0,
+	completion_tokens INTEGER NOT NULL DEFAULT 0,
+	total_tokens      INTEGER NOT NULL DEFAULT 0,
+	duration_ms       INTEGER NOT NULL DEFAULT 0,
+	error             TEXT NOT NULL DEFAULT '',
+	created_at        INTEGER NOT NULL,
+	record_id           TEXT NOT NULL DEFAULT '',
+	record_error        TEXT NOT NULL DEFAULT '',
+	record_attempted_at INTEGER NOT NULL DEFAULT 0,
+	scope               TEXT NOT NULL DEFAULT ''
+);
+
 CREATE INDEX IF NOT EXISTS idx_minutes_status ON minutes (status, next_attempt_at);
 CREATE INDEX IF NOT EXISTS idx_minutes_user ON minutes (user_id, minute_created_at);
 CREATE INDEX IF NOT EXISTS idx_llm_calls_minute ON llm_calls (minute_id);
+CREATE INDEX IF NOT EXISTS idx_chats_user ON chats (user_id, updated_at);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_chat ON chat_messages (chat_id);
 `
 
 // Store 封装数据库连接

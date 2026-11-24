@@ -112,10 +112,11 @@ func (s *Server) handleMinuteList(w http.ResponseWriter, r *http.Request, user *
 	pageSize := min(positiveInt(query.Get("page_size"), defaultPageSize), maxPageSize)
 
 	records, total, err := s.store.ListMinutes(r.Context(), store.MinuteFilter{
-		UserID: scopedUserID(r, user),
-		Status: query.Get("status"),
-		Limit:  pageSize,
-		Offset: (page - 1) * pageSize,
+		UserID:  scopedUserID(r, user),
+		Status:  query.Get("status"),
+		Keyword: query.Get("q"),
+		Limit:   pageSize,
+		Offset:  (page - 1) * pageSize,
 	})
 	if err != nil {
 		writeInternalError(w, err)

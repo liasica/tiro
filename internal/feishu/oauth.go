@@ -27,6 +27,7 @@ var UserScopes = []string{
 	"minutes:minutes.artifacts:read",
 	"docx:document:create",
 	"space:folder:create",
+	"bitable:app",
 	"offline_access",
 }
 

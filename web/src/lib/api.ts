@@ -93,9 +93,130 @@ export interface Stats {
   last_sync_at: string | null
 }
 
+export interface ChatContext {
+  scope: Scope
+  minute_ids: number[]
+  start_date: string
+  end_date: string
+}
+
+export interface ChatModelOption {
+  id: string
+  name: string
+  model: string
+}
+
+export interface ChatSummary {
+  id: number
+  title: string
+  source: 'web' | 'bot'
+  ended: boolean
+  bitable_url: string
+  created_at: string | null
+  updated_at: string | null
+}
+
+export type ChatStepKind = 'search' | 'read' | 'transcript'
+
+export interface ChatStep {
+  kind: ChatStepKind
+  text: string
+}
+
+export interface ChatMoment {
+  label: string
+  url: string
+}
+
+export interface ChatSource {
+  index: number
+  minute_id: number
+  title: string
+  owner: string
+  minute_created_at: string | null
+  duration_seconds: number
+  minute_url: string
+  doc_url: string
+  moments: ChatMoment[]
+}
+
+// 问答写入多维表格的状态，只有助手消息有值
+export type RecordWriteStatus = '' | 'pending' | 'done' | 'failed'
+
+export interface ChatMessage {
+  id: number
+  role: 'user' | 'assistant'
+  content: string
+  steps: ChatStep[]
+  sources: ChatSource[]
+  model: string
+  prompt_tokens: number
+  completion_tokens: number
+  total_tokens: number
+  duration_ms: number
+  error: string
+  record_status: RecordWriteStatus
+  record_error: string
+  created_at: string | null
+}
+
+export interface ContextMinute {
+  id: number
+  title: string
+  minute_created_at: string | null
+}
+
+export interface ChatDetail extends ChatSummary {
+  context: ChatContext
+  context_minutes: ContextMinute[]
+  model_id: string
+  messages: ChatMessage[]
+}
+
+export interface ChatAskInput {
+  chat_id: number | null
+  question: string
+  context: ChatContext
+  model_id: string
+}
+
+// 提问接口推送的 SSE 事件
+export type ChatEvent =
+  | { event: 'chat'; data: ChatSummary }
+  | { event: 'question'; data: ChatMessage }
+  | { event: 'step'; data: ChatStep }
+  | { event: 'delta'; data: { text: string } }
+  | { event: 'reset'; data: Record<string, never> }
+  | { event: 'answer'; data: ChatMessage }
+
+// 对话模型按接口配置，models 是勾选给对话用的模型
+// 对话模型接口的格式
+export type ChatApi = 'chat_completions' | 'responses'
+
+export interface ChatProviderSetting {
+  id: string
+  name: string
+  base_url: string
+  api: ChatApi
+  api_key_set: boolean
+  models: string[]
+}
+
+export interface ChatProviderInput {
+  id: string
+  name: string
+  base_url: string
+  api: ChatApi
+  api_key?: string
+  models: string[]
+}
+
 export interface Settings {
   feishu: { app_id: string; app_secret_set: boolean }
   llm: { base_url: string; model: string; api_key_set: boolean }
+  // default_id 形如 `${provider_id}:${model}`
+  chat: { providers: ChatProviderSetting[]; default_id: string }
+  bot: { connected: boolean; error: string; connected_at: string | null }
   poll_interval_seconds: number
   folder_name: string
   min_transcript_chars: number
@@ -106,6 +227,7 @@ export interface Settings {
 
 export interface SettingsPatch {
   llm?: { base_url?: string; model?: string; api_key?: string }
+  chat?: { providers: ChatProviderInput[]; default_id: string }
   poll_interval_seconds?: number
   folder_name?: string
   min_transcript_chars?: number
@@ -118,6 +240,14 @@ export interface LlmTestInput {
   model: string
   api_key?: string
 }
+
+export interface LlmModelsInput {
+  base_url: string
+  api_key?: string
+  provider_id?: string
+}
+
+export type LlmModelsResult = { ok: true; models: { id: string; owned_by: string }[] } | { ok: false; error: string }
 
 export type LlmTestResult =
   | { ok: true; reply: string; latency_ms: number }
@@ -152,7 +282,8 @@ export function setUnauthorizedHandler(fn: () => void) {
   onUnauthorized = fn
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+// 发出请求并处理错误响应，成功时返回原始响应
+async function send(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<Response> {
   let res: Response
   try {
     res = await fetch(`/api${path}`, {
@@ -160,8 +291,10 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
       credentials: 'same-origin',
       headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
+      signal,
     })
-  } catch {
+  } catch (e) {
+    if (signal?.aborted) throw e
     throw new ApiError(0, '无法连接服务')
   }
 
@@ -176,10 +309,60 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     if (res.status === 401 && path !== '/state') onUnauthorized?.()
     throw new ApiError(res.status, message)
   }
+  return res
+}
 
+async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const res = await send(method, path, body)
   if (res.status === 204) return undefined as T
   const text = await res.text()
   return (text ? JSON.parse(text) : undefined) as T
+}
+
+// 解析一个 SSE 事件块，只认 event 与 data 字段
+function parseEvent(block: string): ChatEvent | null {
+  let event = 'message'
+  const data: string[] = []
+  for (const line of block.split(/\r?\n/)) {
+    if (!line || line.startsWith(':')) continue
+    const i = line.indexOf(':')
+    const field = i < 0 ? line : line.slice(0, i)
+    let value = i < 0 ? '' : line.slice(i + 1)
+    if (value.startsWith(' ')) value = value.slice(1)
+    if (field === 'event') event = value
+    else if (field === 'data') data.push(value)
+  }
+  if (data.length === 0) return null
+  try {
+    return { event, data: JSON.parse(data.join('\n')) } as ChatEvent
+  } catch {
+    return null
+  }
+}
+
+// 逐块读取 SSE 流，一个 chunk 可能只含半个事件，按空行切分后再解析
+async function readEvents(body: ReadableStream<Uint8Array>, onEvent: (e: ChatEvent) => void) {
+  const reader = body.getReader()
+  const decoder = new TextDecoder()
+  const boundary = /\r?\n\r?\n/
+  let buf = ''
+  for (;;) {
+    const { value, done } = await reader.read()
+    if (done) {
+      buf += decoder.decode()
+      break
+    }
+    buf += decoder.decode(value, { stream: true })
+    let m: RegExpExecArray | null
+    while ((m = boundary.exec(buf))) {
+      const block = buf.slice(0, m.index)
+      buf = buf.slice(m.index + m[0].length)
+      const e = parseEvent(block)
+      if (e) onEvent(e)
+    }
+  }
+  const rest = buf.trim() ? parseEvent(buf) : null
+  if (rest) onEvent(rest)
 }
 
 function qs(params: Record<string, string | number | undefined>) {
@@ -201,7 +384,7 @@ export const api = {
   flow: (id: string) => request<FlowState>('GET', `/flows/${encodeURIComponent(id)}`),
   logout: () => request<void>('POST', '/auth/logout'),
 
-  minutes: (p: { page: number; page_size: number; status: RecordStatus | ''; scope: Scope }) =>
+  minutes: (p: { page: number; page_size: number; status: RecordStatus | ''; scope: Scope; q?: string }) =>
     request<Page<MinuteRecord>>('GET', `/minutes${qs(p)}`),
   minute: (id: number) => request<MinuteDetail>('GET', `/minutes/${id}`),
   generate: (id: number) => request<void>('POST', `/minutes/${id}/generate`),
@@ -211,6 +394,19 @@ export const api = {
   settings: () => request<Settings>('GET', '/settings'),
   updateSettings: (patch: SettingsPatch) => request<Settings>('PUT', '/settings', patch),
   testLlm: (input: LlmTestInput) => request<LlmTestResult>('POST', '/settings/llm/test', input),
+  llmModels: (input: LlmModelsInput) => request<LlmModelsResult>('POST', '/settings/llm/models', input),
+
+  chatModels: () => request<{ items: ChatModelOption[]; default_id: string }>('GET', '/chat/models'),
+  chats: () => request<{ items: ChatSummary[] }>('GET', '/chats'),
+  chat: (id: number) => request<ChatDetail>('GET', `/chats/${id}`),
+  deleteChat: (id: number) => request<void>('DELETE', `/chats/${id}`),
+  endChat: (id: number) => request<ChatSummary>('POST', `/chats/${id}/end`),
+  // 提问：校验失败时抛出 ApiError，成功后按顺序回调流中的事件，直到流结束
+  ask: async (input: ChatAskInput, onEvent: (e: ChatEvent) => void, signal?: AbortSignal) => {
+    const res = await send('POST', '/chats/ask', input, signal)
+    if (!res.body) throw new ApiError(0, '响应为空')
+    await readEvents(res.body, onEvent)
+  },
 
   users: () => request<{ items: Member[] }>('GET', '/users'),
   updateUser: (id: number, patch: { enabled?: boolean; role?: Role }) =>

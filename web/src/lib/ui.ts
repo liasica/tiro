@@ -22,6 +22,11 @@ export function generateLabel(status: RecordStatus) {
   return status === 'failed' ? '重试' : status === 'skipped' ? '生成' : '重新生成'
 }
 
+// 请求成功时至少持续 ms 毫秒，让按钮的加载动画完整播放一次
+export function atLeast<T>(p: Promise<T>, ms = 500): Promise<T> {
+  return Promise.all([p, new Promise((r) => setTimeout(r, ms))]).then(([v]) => v)
+}
+
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
 
 export function buttonClass(variant: ButtonVariant, size: 'sm' | 'md', className?: string) {

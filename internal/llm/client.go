@@ -21,11 +21,19 @@ const (
 	errorSnippetBytes = 300
 )
 
+// 模型接口的格式
+const (
+	APIChatCompletions = "chat_completions"
+	APIResponses       = "responses"
+)
+
 // Config 是模型接口的连接参数
 type Config struct {
 	BaseURL string
 	APIKey  string
 	Model   string
+	// API 是对话使用的接口格式，为空时按 Chat Completions 处理；纪要生成只用 Chat Completions
+	API string
 }
 
 // Configured 判断接口地址与模型名是否都已填写，密钥允许为空

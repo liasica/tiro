@@ -3,6 +3,7 @@ import { CircleAlert, CircleCheck, Plug } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import type { LlmTestResult, Settings } from '../lib/api'
 import { api } from '../lib/api'
+import { atLeast } from '../lib/ui'
 import { Button, Field, Input } from './ui'
 
 // 模型接口表单：设置页与初始化向导第 3 步共用
@@ -21,7 +22,10 @@ export function LlmForm({
   const [result, setResult] = useState<LlmTestResult | null>(null)
   const keySet = initial?.api_key_set ?? false
   // 地址改了之后已保存的密钥不再沿用
-  const urlChanged = keySet && baseUrl.trim().replace(/\/+$/, '') !== (initial?.base_url ?? '')
+  const url = baseUrl.trim().replace(/\/+$/, '')
+  const urlChanged = keySet && url !== (initial?.base_url ?? '')
+  // 向导里没有已保存的配置，始终可以提交
+  const dirty = !initial || url !== initial.base_url || model.trim() !== initial.model || apiKey.trim() !== ''
 
   const test = useMutation({
     mutationFn: () => api.testLlm({ base_url: baseUrl.trim(), model: model.trim(), ...(apiKey ? { api_key: apiKey } : {}) }),
@@ -31,7 +35,7 @@ export function LlmForm({
   })
 
   const save = useMutation({
-    mutationFn: () => api.updateSettings({ llm: { base_url: baseUrl.trim(), model: model.trim(), ...(apiKey ? { api_key: apiKey } : {}) } }),
+    mutationFn: () => atLeast(api.updateSettings({ llm: { base_url: baseUrl.trim(), model: model.trim(), ...(apiKey ? { api_key: apiKey } : {}) } })),
     onSuccess: (s) => {
       setApiKey('')
       onSaved(s)
@@ -43,7 +47,7 @@ export function LlmForm({
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault()
-    if (canSubmit) save.mutate()
+    if (canSubmit && dirty) save.mutate()
   }
 
   return (
@@ -66,28 +70,11 @@ export function LlmForm({
         />
       </Field>
 
-      {result && (
-        <div className="anim-fade rounded-lg border border-line bg-surface px-3.5 py-2.5 text-[13px]">
-          {result.ok ? (
-            <div className="space-y-1">
-              <div className="flex items-center gap-1.5 text-ok">
-                <CircleCheck className="size-4" />
-                连接正常，耗时 {result.latency_ms} ms
-              </div>
-              {result.reply && <p className="line-clamp-3 text-muted">{result.reply}</p>}
-            </div>
-          ) : (
-            <div className="flex items-start gap-1.5 text-err">
-              <CircleAlert className="mt-0.5 size-4 shrink-0" />
-              <span className="break-all">{result.error}</span>
-            </div>
-          )}
-        </div>
-      )}
+      {result && <LlmTestResultBox result={result} />}
       {save.isError && <p className="text-[13px] text-err">{save.error.message}</p>}
 
       <div className="flex flex-wrap gap-2 pt-1">
-        <Button variant="primary" type="submit" loading={save.isPending} disabled={!canSubmit}>
+        <Button variant="primary" type="submit" loading={save.isPending} disabled={!canSubmit || !dirty}>
           {submitText}
         </Button>
         <Button onClick={() => test.mutate()} loading={test.isPending} disabled={!canSubmit}>
@@ -96,5 +83,27 @@ export function LlmForm({
         </Button>
       </div>
     </form>
+  )
+}
+
+// 测试连接的结果
+function LlmTestResultBox({ result }: { result: LlmTestResult }) {
+  return (
+    <div className="anim-fade rounded-lg border border-line bg-surface px-3.5 py-2.5 text-[13px]">
+      {result.ok ? (
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5 text-ok">
+            <CircleCheck className="size-4" />
+            连接正常，耗时 {result.latency_ms} ms
+          </div>
+          {result.reply && <p className="line-clamp-3 text-muted">{result.reply}</p>}
+        </div>
+      ) : (
+        <div className="flex items-start gap-1.5 text-err">
+          <CircleAlert className="mt-0.5 size-4 shrink-0" />
+          <span className="break-all">{result.error}</span>
+        </div>
+      )}
+    </div>
   )
 }

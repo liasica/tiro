@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -42,12 +43,13 @@ type Minute struct {
 	TotalTokens    int64
 }
 
-// MinuteFilter 是列表查询条件，UserID 为 0 表示不限所有者
+// MinuteFilter 是列表查询条件，UserID 为 0 表示不限所有者，Keyword 按标题模糊匹配
 type MinuteFilter struct {
-	UserID int64
-	Status string
-	Limit  int
-	Offset int
+	UserID  int64
+	Status  string
+	Keyword string
+	Limit   int
+	Offset  int
 }
 
 // MinuteStats 是各状态的记录数与累计消耗的 token 数
@@ -205,6 +207,12 @@ func (s *Store) ListMinutes(ctx context.Context, filter MinuteFilter) ([]*Minute
 		where += ` AND m.status = ?`
 
 		args = append(args, filter.Status)
+	}
+
+	if keyword := strings.TrimSpace(filter.Keyword); keyword != "" {
+		where += ` AND m.title LIKE ? ESCAPE '\'`
+
+		args = append(args, likePattern(keyword))
 	}
 
 	var total int

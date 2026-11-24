@@ -177,20 +177,41 @@ function useEscape(onClose: () => void) {
   }, [onClose])
 }
 
-export function Modal({ title, onClose, children, footer }: { title: string; onClose: () => void; children: ReactNode; footer?: ReactNode }) {
+// size 为 lg 时宽约 640px；内容超出视口高度时正文区域滚动
+export function Modal({
+  title,
+  onClose,
+  children,
+  footer,
+  size = 'md',
+}: {
+  title: string
+  onClose: () => void
+  children: ReactNode
+  footer?: ReactNode
+  size?: 'md' | 'lg'
+}) {
   useEscape(onClose)
   return createPortal(
     <div className="fixed inset-0 z-50 grid place-items-center p-4">
       <div className="anim-fade absolute inset-0 bg-black/50 backdrop-blur-[2px]" onClick={onClose} />
-      <div role="dialog" aria-modal="true" aria-label={title} className="anim-rise relative w-full max-w-md rounded-xl border border-line-strong bg-surface shadow-(--shadow)">
-        <div className="flex items-center justify-between px-5 pt-4">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className={cx(
+          'anim-rise relative flex max-h-[calc(100dvh-2rem)] w-full flex-col rounded-xl border border-line-strong bg-surface shadow-(--shadow)',
+          size === 'lg' ? 'max-w-[640px]' : 'max-w-md',
+        )}
+      >
+        <div className="flex shrink-0 items-center justify-between px-5 pt-4">
           <h2 className="text-[15px] font-semibold">{title}</h2>
           <button type="button" onClick={onClose} className="rounded-md p-1 text-faint hover:bg-raised hover:text-text" aria-label="关闭">
             <X className="size-4" />
           </button>
         </div>
-        <div className="px-5 py-4">{children}</div>
-        {footer && <div className="flex justify-end gap-2 border-t border-line px-5 py-3">{footer}</div>}
+        <div className="min-h-0 overflow-y-auto px-5 py-4">{children}</div>
+        {footer && <div className="flex shrink-0 justify-end gap-2 border-t border-line px-5 py-3">{footer}</div>}
       </div>
     </div>,
     document.body,

@@ -173,6 +173,11 @@ func (s *Store) User(ctx context.Context, id int64) (*User, error) {
 	return scanUser(s.db.QueryRowContext(ctx, `SELECT `+userColumns+` FROM users WHERE id = ?`, id))
 }
 
+// UserByOpenID 按飞书 open_id 读取用户
+func (s *Store) UserByOpenID(ctx context.Context, openID string) (*User, error) {
+	return scanUser(s.db.QueryRowContext(ctx, `SELECT `+userColumns+` FROM users WHERE open_id = ?`, openID))
+}
+
 // Users 读取全部用户，按创建顺序排列
 func (s *Store) Users(ctx context.Context) ([]*User, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT `+userColumns+` FROM users ORDER BY id`)

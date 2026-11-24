@@ -11,9 +11,12 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"sync"
 	"syscall"
 	"time"
 
+	"github.com/liasica/tiro/internal/bot"
+	"github.com/liasica/tiro/internal/chat"
 	"github.com/liasica/tiro/internal/feishu"
 	"github.com/liasica/tiro/internal/server"
 	"github.com/liasica/tiro/internal/store"
@@ -57,6 +60,8 @@ func run(address, dataDir string) error {
 
 	client := feishu.New()
 	background := worker.New(database, client)
+	conversations := chat.New(database, background)
+	messenger := bot.New(database, client, conversations, background)
 
 	var handler *server.Server
 
@@ -64,6 +69,8 @@ func run(address, dataDir string) error {
 		Store:   database,
 		Feishu:  client,
 		Worker:  background,
+		Chat:    conversations,
+		Bot:     messenger,
 		Assets:  web.Assets(),
 		Version: version,
 	})
@@ -81,16 +88,23 @@ func run(address, dataDir string) error {
 	httpServer := &http.Server{
 		Handler:           handler.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
+		// 退出时取消进行中的请求，正在流式输出的回答随即以「回答已中断」保存
+		BaseContext: func(net.Listener) context.Context { return ctx },
 	}
 
 	announce(ctx, database, listener.Addr())
 
-	workerDone := make(chan struct{})
+	var routines sync.WaitGroup
+
+	routines.Go(func() { background.Run(ctx) })
+	routines.Go(func() { background.RunRecorder(ctx, conversations.Answered()) })
+	routines.Go(func() { messenger.Run(ctx) })
+
+	routinesDone := make(chan struct{})
 
 	go func() {
-		defer close(workerDone)
-
-		background.Run(ctx)
+		routines.Wait()
+		close(routinesDone)
 	}()
 
 	serveErr := make(chan error, 1)
@@ -104,14 +118,14 @@ func run(address, dataDir string) error {
 		err = nil
 	}
 
-	// 给进行中的请求与正在生成的纪要一点收尾时间
+	// 给进行中的请求、正在生成的纪要与机器人回答一点收尾时间，数据库要等它们写完再关
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	_ = httpServer.Shutdown(shutdownCtx)
 
 	select {
-	case <-workerDone:
+	case <-routinesDone:
 	case <-shutdownCtx.Done():
 	}
 

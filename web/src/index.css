@@ -362,3 +362,37 @@ button {
 .md tbody tr:nth-child(even) td {
   background: color-mix(in srgb, var(--raised) 45%, transparent);
 }
+
+/* 对话回答里的引用角标，连续多个之间留出细小间距 */
+.cite {
+  display: inline-block;
+  min-width: 17px;
+  padding: 0 4px;
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
+  border-radius: 4px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 15px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.md .cite {
+  position: relative;
+  top: -0.45em;
+  margin: 0 1.5px;
+  text-decoration: none;
+}
+
+.md a.cite:hover {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+.md span.cite {
+  border-color: var(--line-strong);
+  background: var(--raised);
+  color: var(--muted);
+}

@@ -4,6 +4,8 @@
 
 Tiro 把飞书妙记自动整理成会议纪要：发现授权用户名下新生成的妙记，取回逐字稿与 AI 产物，交给大模型按模板写成纪要，在该用户的飞书云空间创建文档，再由机器人私聊把链接发给本人。
 
+成员还可以在后台或机器人私聊里与对话 Agent 问答，Agent 检索妙记与纪要作答并附引用来源；每个对话的问答写进提问人云空间里的一个多维表格。
+
 自托管的单体服务：Go 后端加 React 后台界面，前端构建产物嵌入二进制，单文件部署。只有出站请求，除后台端口外不需要对外开放任何入口。
 
 ## 技术栈
@@ -19,7 +21,7 @@ Tiro 把飞书妙记自动整理成会议纪要：发现授权用户名下新生
 
 ## 约束
 
-- 触发方式是定时搜索新妙记，不依赖事件
+- 发现新妙记靠定时搜索，不依赖事件；机器人私聊消息经长连接接收，长连接也是出站连接
 - 纪要生成走 OpenAI 格式的接口，地址、密钥、模型名在后台设置，密钥可以为空
 - 纪要文档以授权人身份创建在其本人云空间的固定文件夹里，默认仅本人可见
 - 妙记与云文档相关接口一律以用户身份调用，每个使用者扫码授权一次；机器人私聊用应用身份
@@ -57,6 +59,12 @@ Tiro 把飞书妙记自动整理成会议纪要：发现授权用户名下新生
 | 建文件夹 | `POST /open-apis/drive/v1/files/create_folder` | `space:folder:create` |
 | 建文档 | `POST /open-apis/docs_ai/v1/documents` | `docx:document:create` |
 | 机器人私聊 | `POST /open-apis/im/v1/messages` | 应用身份，`im:message:send_as_bot` |
+| 更新回答卡片 | `PATCH /open-apis/im/v1/messages/{message_id}` | 应用身份，`im:message:send_as_bot` |
+| 长连接接入 | `POST /callback/ws/endpoint` | 应用凭据 |
+| 接收私聊消息 | 事件 `im.message.receive_v1` | `im:message.p2p_msg:readonly` |
+| 建多维表格 | `POST /open-apis/bitable/v1/apps` | `bitable:app` |
+| 建数据表、字段 | `POST /open-apis/bitable/v1/apps/{app_token}/tables`、`…/tables/{table_id}/fields` | `bitable:app` |
+| 写记录 | `POST /open-apis/bitable/v1/apps/{app_token}/tables/{table_id}/records` | `bitable:app` |
 
 - 搜索可按 `owner_ids` 与 `create_time.start_time` 过滤，`sorter` 用 `create_time_desc`；结果项只有 `token`、`display_info`、`meta_data`，标题、创建时间、时长要从基本信息接口取
 - 新妙记生成约 6 分钟后才能被搜到；内容接口在妙记生成后立即可取
@@ -67,6 +75,33 @@ Tiro 把飞书妙记自动整理成会议纪要：发现授权用户名下新生
 - 建文件夹时 `folder_token` 传空串表示用户云空间根目录
 - 建文档的请求体是 `format=markdown` 加 `content`，标题用 `<title>` 标签写在正文最前面；响应要么直接给出 `document`，要么给出异步任务，再轮询 `GET /open-apis/docs_ai/v1/async_tasks/{task_id}`
 - Markdown 正文里可以混写飞书文档的 XML 标签，转成对应的原生块：`<callout>` 高亮块、`<grid>` 加 `<column>` 分栏、`<whiteboard>` 画板，语法见 larksuite/cli 仓库的 `skills/lark-doc/references/lark-doc-xml.md`。`- [ ]` 转成勾选框；单独成行的 `<checkbox>` 之间会多出空段落。链接后面的普通空格会被吞掉，要用不换行空格。半角 `<`、`$`、`*`、`_` 等字符会被当成语法，程序填写的纯文本要转义
+
+## 对话
+
+- 对话 Agent 在 `internal/chat`，提示词是 `internal/chat/prompt.md`，网页与机器人共用。模型通过工具检索：`search_minutes` 按时间段与关键词找妙记，`read_minutes` 读纪要正文，`read_transcript` 用所有者的令牌读逐字稿；一个问题最多 8 轮工具调用，用完后要求直接作答
+- 对话模型按接口配置：填接口地址与密钥后经 `GET {接口地址}/models` 取模型列表，勾选给对话用的模型并指定默认模型；接口 ID 由前端生成，模型 ID 是「接口 ID:模型名」；密钥留空时沿用同一地址已保存的密钥（这个接口原来的或纪要模型的），地址变了不沿用。一个接口都没有时沿用纪要的模型。网页提问时可选模型，机器人用默认模型。模型必须支持流式输出与工具调用
+- 对话模型接口有 Chat Completions 与 Responses 两种格式，在接口上设置，没设置时 `api.openai.com` 用 Responses、其余用 Chat Completions。OpenAI 的新模型在 Chat Completions 里不能同时用推理与工具调用（报 `Function tools with reasoning_effort are not supported`），只能走 `/v1/responses`。Responses 首轮发送系统提示词（`instructions`）与全部历史，之后用 `previous_response_id` 接续、只发工具结果（`function_call_output`），推理过程由接口保存；`instructions` 每轮都要重新给出
+- 检索范围属于对话：管理员可选全部成员，成员只能检索自己的妙记；可再限定时间段或手动选择至多 20 条妙记
+- 模型用 `[#记录编号]`、`[#记录编号@mm:ss]` 标注出处，程序按首次出现的顺序改写成 `{{cite:序号}}`、`{{cite:序号@mm:ss}}` 并生成引用来源（纪要链接、妙记链接、`妙记链接?t=毫秒` 的时间点链接）；看不到或不存在的编号直接删掉。历史消息回传给模型前再改回编号写法
+- 网页提问走 SSE：依次推送 `chat`、`question`、`step`、`delta`、`reset`、`answer`；`reset` 表示模型转去调用工具，此前的增量作废；没有输出时每 15 秒发一行 `: ping` 注释，避免反向代理按读超时断开。同一对话同时只回答一个问题；请求断开或进程退出时回答以「回答已中断」保存，退出时等回答存好再关数据库
+- 对话可以结束，结束后不能再提问。机器人私聊发送「新对话」或「结束」结束当前对话，下一条提问开始新的对话
+- 机器人收到提问先回一张进度卡片，回答过程中每 1.2 秒更新一次，完成后换成带引用角标与引用来源的最终卡片；卡片要声明 `update_multi` 才能更新，更新失败时另发一张
+
+## 机器人长连接
+
+- 长连接接入要先 `POST /callback/ws/endpoint`（请求体 `AppID`、`AppSecret`）取 WebSocket 地址，帧是 protobuf 编码的 `Frame`，编解码手写在 `internal/feishu/frame.go`；每个事件帧要在 3 秒内回 `{"code":200}`，否则飞书重推，所以先应答再异步处理，并按消息 ID 去重
+- 开发者后台「事件与回调」选「使用长连接接收事件」时，保存前必须已有客户端连上；同一应用的多个客户端同时在线时，每个事件只随机投递给其中一个，本地联调前先停掉线上实例或改用另一个应用
+- 断线后从 5 秒开始逐次翻倍重连，最长 2 分钟；设置页显示连接状态
+
+## 对话记录
+
+- 每个对话对应一个多维表格「对话记录：对话标题 日期」，以提问人身份建在其纪要文件夹里，默认仅本人可见，分享用飞书自带的分享
+- 两张数据表：「问答」每轮问答一条，字段为问题、回答（纯文本，引用写成〔序号〕）、引用明细（带链接）、提问人、提问时间、检索范围、渠道、模型、Token、状态、引用妙记（单向关联）；「引用妙记」每场会议一条，字段为标题、妙记时间、时长、会议纪要、妙记、所有者。新建的多维表格自带一张空数据表，问答表建好后删掉
+- 关联字段要等妙记表建好才能加，所以排在问答表最后一列；记录按字段名写入，字段名就是中文列名
+- 回答保存后立即异步写入，机器人等写完再把多维表格链接放进卡片；失败原因记在消息上，7 天内的失败记录每 5 分钟补写一次
+- 多维表格、数据表、关联字段与妙记记录每完成一步立即落库，中途失败时下次接着做；建表或加字段报重名时按已建好处理，记录带 `client_token` 写入，重试不会重复。多维表格被用户删除后，下一条问答写入时新建一个
+- 检索范围按提问时记在用户消息上，补写时不会被对话后来的范围覆盖
+- 写多维表格需要用户权限 `bitable:app`，开通前授权的成员要重新扫码登录一次
 
 ## 处理流程
 

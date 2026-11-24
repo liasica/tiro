@@ -1,0 +1,231 @@
+import { AudioLines, ChevronRight, FileText, Search } from 'lucide-react'
+import { createContext, memo, useContext, useState, type AnchorHTMLAttributes } from 'react'
+import Markdown, { type Components, type ExtraProps } from 'react-markdown'
+import remarkCjkFriendly from 'remark-cjk-friendly'
+import remarkGfm from 'remark-gfm'
+import { Spinner } from '../components/ui'
+import type { ChatMessage, ChatSource, ChatStep, ChatStepKind } from '../lib/api'
+import { citeTarget, linkCites, parseCiteHref } from '../lib/chat'
+import { formatCount, formatDuration, formatMillis, formatTime, formatTokens } from '../lib/format'
+import { cx } from '../lib/ui'
+
+// 当前回答的引用来源，供 Markdown 里的角标查找
+const SourcesContext = createContext<ChatSource[]>([])
+
+function MdLink({ href, children, node: _node, ...rest }: AnchorHTMLAttributes<HTMLAnchorElement> & ExtraProps) {
+  const sources = useContext(SourcesContext)
+  const cite = href ? parseCiteHref(href) : null
+  if (!cite) {
+    return (
+      <a {...rest} href={href} target="_blank" rel="noreferrer">
+        {children}
+      </a>
+    )
+  }
+  const src = sources.find((s) => s.index === cite.index)
+  if (!src) return <span className="cite">{cite.index}</span>
+  const title = [src.title || '未命名妙记', cite.time].filter(Boolean).join(' · ')
+  return (
+    <a href={citeTarget(src, cite.time)} target="_blank" rel="noreferrer" className="cite" title={title} aria-label={`引用 ${cite.index}：${title}`}>
+      {cite.index}
+    </a>
+  )
+}
+
+const mdComponents: Components = { a: MdLink }
+
+function Answer({ text, sources }: { text: string; sources: ChatSource[] }) {
+  return (
+    <SourcesContext value={sources}>
+      <article className="md">
+        <Markdown remarkPlugins={[remarkGfm, remarkCjkFriendly]} components={mdComponents}>
+          {text}
+        </Markdown>
+      </article>
+    </SourcesContext>
+  )
+}
+
+export const UserBubble = memo(function UserBubble({ text }: { text: string }) {
+  return (
+    <div className="flex justify-end">
+      <div className="max-w-[85%] rounded-2xl rounded-br-md border border-accent/20 bg-accent-soft px-3.5 py-2 text-sm leading-relaxed break-words whitespace-pre-wrap">
+        {text}
+      </div>
+    </div>
+  )
+})
+
+const stepIcons: Record<ChatStepKind, typeof Search> = {
+  search: Search,
+  read: FileText,
+  transcript: AudioLines,
+}
+
+function StepList({ steps, pending }: { steps: ChatStep[]; pending?: boolean }) {
+  return (
+    <ul className="space-y-1">
+      {steps.map((s, i) => {
+        const Icon = stepIcons[s.kind] ?? Search
+        return (
+          <li key={i} className="flex items-start gap-2 text-xs leading-relaxed text-faint">
+            <Icon className="mt-[3px] size-3.5 shrink-0" />
+            <span className="min-w-0 break-words">{s.text}</span>
+          </li>
+        )
+      })}
+      {pending && (
+        <li>
+          <Spinner className="size-3.5" />
+        </li>
+      )}
+    </ul>
+  )
+}
+
+// 已完成的检索过程折叠成一行，点击展开
+function StepsFold({ steps }: { steps: ChatStep[] }) {
+  const [open, setOpen] = useState(false)
+  if (steps.length === 0) return null
+  return (
+    <div className="mb-3">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="-ml-1 inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-xs text-faint transition-colors hover:text-muted"
+      >
+        <ChevronRight className={cx('size-3.5 transition-transform duration-150', open && 'rotate-90')} />
+        检索过程 · {steps.length} 步
+      </button>
+      {open && (
+        <div className="mt-1.5 ml-1 border-l border-line pl-3">
+          <StepList steps={steps} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ErrorBox({ text }: { text: string }) {
+  return <div className="mt-3 rounded-lg border border-err/30 bg-err/8 px-3.5 py-2.5 text-[13px] break-words text-err">{text}</div>
+}
+
+function Sources({ sources, showOwner }: { sources: ChatSource[]; showOwner: boolean }) {
+  const sorted = [...sources].sort((a, b) => a.index - b.index)
+  const link = 'text-accent hover:text-accent-strong'
+  return (
+    <section className="mt-5">
+      <h4 className="mb-2.5 flex items-center gap-3 text-xs text-faint">
+        引用来源
+        <span className="h-px flex-1 bg-line" />
+      </h4>
+      <ol className="space-y-3">
+        {sorted.map((s) => {
+          const meta = [formatTime(s.minute_created_at), s.duration_seconds > 0 ? formatDuration(s.duration_seconds) : '', showOwner ? s.owner : ''].filter(
+            (v) => v && v !== '—',
+          )
+          return (
+            <li key={s.index} className="flex gap-2.5 text-[13px]">
+              <span className="cite mt-0.5 shrink-0 self-start" aria-hidden>
+                {s.index}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className={cx('break-words', s.title ? 'text-text' : 'text-faint')}>{s.title || '未命名妙记'}</div>
+                {meta.length > 0 && <div className="text-xs text-faint tabular-nums">{meta.join(' · ')}</div>}
+                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                  {s.doc_url && (
+                    <a href={s.doc_url} target="_blank" rel="noreferrer" className={link}>
+                      会议纪要
+                    </a>
+                  )}
+                  <a href={s.minute_url} target="_blank" rel="noreferrer" className={link}>
+                    妙记
+                  </a>
+                  {s.moments.map((m, i) => (
+                    <a
+                      key={`${m.label}-${i}`}
+                      href={m.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded border border-line px-1 text-muted tabular-nums transition-colors hover:border-accent/50 hover:text-accent"
+                    >
+                      {m.label}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            </li>
+          )
+        })}
+      </ol>
+    </section>
+  )
+}
+
+function MetaLine({ message: m }: { message: ChatMessage }) {
+  const parts: { text: string; title?: string }[] = []
+  if (m.model) parts.push({ text: m.model })
+  if (m.total_tokens > 0) {
+    parts.push({ text: `${formatTokens(m.total_tokens)} Token`, title: `输入 ${formatCount(m.prompt_tokens)} · 输出 ${formatCount(m.completion_tokens)}` })
+  }
+  if (m.duration_ms > 0) parts.push({ text: formatMillis(m.duration_ms) })
+  const record = m.record_status === 'pending' || m.record_status === 'failed' ? m.record_status : null
+  if (parts.length === 0 && !record) return null
+  return (
+    <div className="mt-4 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-faint/80 tabular-nums">
+      {parts.map((p, i) => (
+        <span key={i} title={p.title}>
+          {i > 0 && <span className="mr-1.5">·</span>}
+          {p.text}
+        </span>
+      ))}
+      {record && (
+        <span className={cx('inline-flex min-w-0 items-center gap-1', record === 'failed' && 'text-err/70')}>
+          {parts.length > 0 && <span className="mr-0.5 text-faint/80">·</span>}
+          {record === 'pending' ? (
+            <>
+              写入多维表格中
+              <Spinner className="size-3" />
+            </>
+          ) : (
+            <span className="break-all">写入多维表格失败{m.record_error ? `：${m.record_error}` : ''}</span>
+          )}
+        </span>
+      )}
+    </div>
+  )
+}
+
+// 已保存的助手消息，流式输出期间不随其他消息重新渲染
+export const AssistantMessage = memo(function AssistantMessage({ message: m, showOwner }: { message: ChatMessage; showOwner: boolean }) {
+  return (
+    <div>
+      <StepsFold steps={m.steps ?? []} />
+      {m.content && <Answer text={linkCites(m.content)} sources={m.sources ?? []} />}
+      {m.error && <ErrorBox text={m.error} />}
+      {(m.sources?.length ?? 0) > 0 && <Sources sources={m.sources} showOwner={showOwner} />}
+      <MetaLine message={m} />
+    </div>
+  )
+})
+
+// 流式生成中或被中断的临时回答，text 已去掉原始引用标记
+export function LiveAnswer({ steps, text, running, error, stopped }: { steps: ChatStep[]; text: string; running: boolean; error: string; stopped: boolean }) {
+  return (
+    <div>
+      {running ? (
+        (steps.length > 0 || !text) && (
+          <div className="mb-3">
+            <StepList steps={steps} pending={!text} />
+          </div>
+        )
+      ) : (
+        <StepsFold steps={steps} />
+      )}
+      {text && <Answer text={text} sources={[]} />}
+      {error && <ErrorBox text={error} />}
+      {stopped && <p className="mt-3 text-xs text-faint">已停止</p>}
+    </div>
+  )
+}

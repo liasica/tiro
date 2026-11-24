@@ -15,6 +15,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/liasica/tiro/internal/bot"
+	"github.com/liasica/tiro/internal/chat"
 	"github.com/liasica/tiro/internal/feishu"
 	"github.com/liasica/tiro/internal/store"
 	"github.com/liasica/tiro/internal/worker"
@@ -28,6 +30,8 @@ type Server struct {
 	store   *store.Store
 	feishu  *feishu.Client
 	worker  *worker.Worker
+	chat    *chat.Service
+	bot     *bot.Bot
 	flows   *flowManager
 	assets  fs.FS
 	version string
@@ -40,6 +44,8 @@ type Options struct {
 	Store   *store.Store
 	Feishu  *feishu.Client
 	Worker  *worker.Worker
+	Chat    *chat.Service
+	Bot     *bot.Bot
 	Assets  fs.FS
 	Version string
 }
@@ -68,6 +74,8 @@ func New(ctx context.Context, options Options) (*Server, error) {
 		store:         options.Store,
 		feishu:        options.Feishu,
 		worker:        options.Worker,
+		chat:          options.Chat,
+		bot:           options.Bot,
 		assets:        options.Assets,
 		version:       options.Version,
 		sessionSecret: []byte(secret),
@@ -96,11 +104,20 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/minutes/{id}", s.withUser(s.handleMinuteDetail))
 	mux.HandleFunc("GET /api/stats", s.withUser(s.handleStats))
 
+	// 对话只有本人可以查看
+	mux.HandleFunc("GET /api/chat/models", s.withUser(s.handleChatModels))
+	mux.HandleFunc("GET /api/chats", s.withUser(s.handleChatList))
+	mux.HandleFunc("POST /api/chats/ask", s.withUser(s.handleChatAsk))
+	mux.HandleFunc("GET /api/chats/{id}", s.withUser(s.handleChatDetail))
+	mux.HandleFunc("DELETE /api/chats/{id}", s.withUser(s.handleChatDelete))
+	mux.HandleFunc("POST /api/chats/{id}/end", s.withUser(s.handleChatEnd))
+
 	mux.HandleFunc("POST /api/minutes", s.withAdmin(s.handleMinuteAdd))
 	mux.HandleFunc("POST /api/minutes/{id}/generate", s.withAdmin(s.handleMinuteGenerate))
 	mux.HandleFunc("GET /api/settings", s.withAdmin(s.handleSettingsGet))
 	mux.HandleFunc("PUT /api/settings", s.withAdmin(s.handleSettingsPut))
 	mux.HandleFunc("POST /api/settings/llm/test", s.withAdmin(s.handleLLMTest))
+	mux.HandleFunc("POST /api/settings/llm/models", s.withAdmin(s.handleLLMModels))
 	mux.HandleFunc("GET /api/users", s.withAdmin(s.handleUserList))
 	mux.HandleFunc("PATCH /api/users/{id}", s.withAdmin(s.handleUserPatch))
 
