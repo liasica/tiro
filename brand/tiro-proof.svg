@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="640" viewBox="0 0 960 640"><rect width="960" height="640" fill="#F6F8FC"/><rect x="24" y="24" width="444" height="440" rx="28" fill="#F6F8FC"/><svg x="86" y="65" width="320" height="320" viewBox="0 0 256 256">  <defs>
+    <linearGradient id="v0-tiro-wing" x1="42" y1="60" x2="196" y2="108" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4B88FF"/>
+      <stop offset="1" stop-color="#3558EB"/>
+    </linearGradient>
+    <linearGradient id="v0-tiro-stem" x1="160" y1="108" x2="69" y2="205" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#3655E8"/>
+      <stop offset="1" stop-color="#4C79FA"/>
+    </linearGradient>
+    <linearGradient id="v0-tiro-page" x1="137" y1="51" x2="216" y2="93" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#24D4BD"/>
+      <stop offset="1" stop-color="#12B7D0"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#v0-tiro-wing)" d="M44 57H198C205 57 209 64 205 70L185 101H74C66 101 60 98 56 92L37 68C33 63 37 57 44 57Z"/>
+  <path fill="url(#v0-tiro-stem)" d="M121 109H169L113 196C109 202 103 205 96 205H64C57 205 54 198 58 192L111 115C114 111 117 109 121 109Z"/>
+  <path fill="url(#v0-tiro-page)" d="M136 48H217C224 48 228 55 224 61L204 92H165Z"/>
+</svg><text x="246" y="427" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#8792AB">浅色背景</text><rect x="492" y="24" width="444" height="440" rx="28" fill="#101623"/><svg x="554" y="65" width="320" height="320" viewBox="0 0 256 256">  <defs>
+    <linearGradient id="v1-tiro-wing" x1="42" y1="60" x2="196" y2="108" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4B88FF"/>
+      <stop offset="1" stop-color="#3558EB"/>
+    </linearGradient>
+    <linearGradient id="v1-tiro-stem" x1="160" y1="108" x2="69" y2="205" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#3655E8"/>
+      <stop offset="1" stop-color="#4C79FA"/>
+    </linearGradient>
+    <linearGradient id="v1-tiro-page" x1="137" y1="51" x2="216" y2="93" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#24D4BD"/>
+      <stop offset="1" stop-color="#12B7D0"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#v1-tiro-wing)" d="M44 57H198C205 57 209 64 205 70L185 101H74C66 101 60 98 56 92L37 68C33 63 37 57 44 57Z"/>
+  <path fill="url(#v1-tiro-stem)" d="M121 109H169L113 196C109 202 103 205 96 205H64C57 205 54 198 58 192L111 115C114 111 117 109 121 109Z"/>
+  <path fill="url(#v1-tiro-page)" d="M136 48H217C224 48 228 55 224 61L204 92H165Z"/>
+</svg><text x="714" y="427" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#8792AB">深色背景</text><text x="52" y="517" font-family="Arial, sans-serif" font-size="14" fill="#68738A">16 / 24 / 32 / 48 px</text><svg x="55" y="564" width="16" height="16" viewBox="32 44 200 170">  <defs>
+    <linearGradient id="s0-tiro-wing" x1="42" y1="60" x2="196" y2="108" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4B88FF"/>
+      <stop offset="1" stop-color="#3558EB"/>
+    </linearGradient>
+    <linearGradient id="s0-tiro-stem" x1="160" y1="108" x2="69" y2="205" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#3655E8"/>
+      <stop offset="1" stop-color="#4C79FA"/>
+    </linearGradient>
+    <linearGradient id="s0-tiro-page" x1="137" y1="51" x2="216" y2="93" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#24D4BD"/>
+      <stop offset="1" stop-color="#12B7D0"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#s0-tiro-wing)" d="M44 57H198C205 57 209 64 205 70L185 101H74C66 101 60 98 56 92L37 68C33 63 37 57 44 57Z"/>
+  <path fill="url(#s0-tiro-stem)" d="M121 109H169L113 196C109 202 103 205 96 205H64C57 205 54 198 58 192L111 115C114 111 117 109 121 109Z"/>
+  <path fill="url(#s0-tiro-page)" d="M136 48H217C224 48 228 55 224 61L204 92H165Z"/>
+</svg><svg x="155" y="556" width="24" height="24" viewBox="32 44 200 170">  <defs>
+    <linearGradient id="s1-tiro-wing" x1="42" y1="60" x2="196" y2="108" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4B88FF"/>
+      <stop offset="1" stop-color="#3558EB"/>
+    </linearGradient>
+    <linearGradient id="s1-tiro-stem" x1="160" y1="108" x2="69" y2="205" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#3655E8"/>
+      <stop offset="1" stop-color="#4C79FA"/>
+    </linearGradient>
+    <linearGradient id="s1-tiro-page" x1="137" y1="51" x2="216" y2="93" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#24D4BD"/>
+      <stop offset="1" stop-color="#12B7D0"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#s1-tiro-wing)" d="M44 57H198C205 57 209 64 205 70L185 101H74C66 101 60 98 56 92L37 68C33 63 37 57 44 57Z"/>
+  <path fill="url(#s1-tiro-stem)" d="M121 109H169L113 196C109 202 103 205 96 205H64C57 205 54 198 58 192L111 115C114 111 117 109 121 109Z"/>
+  <path fill="url(#s1-tiro-page)" d="M136 48H217C224 48 228 55 224 61L204 92H165Z"/>
+</svg><svg x="255" y="548" width="32" height="32" viewBox="32 44 200 170">  <defs>
+    <linearGradient id="s2-tiro-wing" x1="42" y1="60" x2="196" y2="108" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4B88FF"/>
+      <stop offset="1" stop-color="#3558EB"/>
+    </linearGradient>
+    <linearGradient id="s2-tiro-stem" x1="160" y1="108" x2="69" y2="205" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#3655E8"/>
+      <stop offset="1" stop-color="#4C79FA"/>
+    </linearGradient>
+    <linearGradient id="s2-tiro-page" x1="137" y1="51" x2="216" y2="93" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#24D4BD"/>
+      <stop offset="1" stop-color="#12B7D0"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#s2-tiro-wing)" d="M44 57H198C205 57 209 64 205 70L185 101H74C66 101 60 98 56 92L37 68C33 63 37 57 44 57Z"/>
+  <path fill="url(#s2-tiro-stem)" d="M121 109H169L113 196C109 202 103 205 96 205H64C57 205 54 198 58 192L111 115C114 111 117 109 121 109Z"/>
+  <path fill="url(#s2-tiro-page)" d="M136 48H217C224 48 228 55 224 61L204 92H165Z"/>
+</svg><svg x="355" y="532" width="48" height="48" viewBox="32 44 200 170">  <defs>
+    <linearGradient id="s3-tiro-wing" x1="42" y1="60" x2="196" y2="108" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4B88FF"/>
+      <stop offset="1" stop-color="#3558EB"/>
+    </linearGradient>
+    <linearGradient id="s3-tiro-stem" x1="160" y1="108" x2="69" y2="205" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#3655E8"/>
+      <stop offset="1" stop-color="#4C79FA"/>
+    </linearGradient>
+    <linearGradient id="s3-tiro-page" x1="137" y1="51" x2="216" y2="93" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#24D4BD"/>
+      <stop offset="1" stop-color="#12B7D0"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#s3-tiro-wing)" d="M44 57H198C205 57 209 64 205 70L185 101H74C66 101 60 98 56 92L37 68C33 63 37 57 44 57Z"/>
+  <path fill="url(#s3-tiro-stem)" d="M121 109H169L113 196C109 202 103 205 96 205H64C57 205 54 198 58 192L111 115C114 111 117 109 121 109Z"/>
+  <path fill="url(#s3-tiro-page)" d="M136 48H217C224 48 228 55 224 61L204 92H165Z"/>
+</svg></svg>
