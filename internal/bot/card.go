@@ -111,8 +111,8 @@ func (p *progress) keepUpdated(ctx context.Context, stop <-chan struct{}, update
 	}
 }
 
-// answerCard 返回最终的回答卡片：正文里的引用换成跳转链接，后面列出引用来源与多维表格链接
-func answerCard(answer *store.ChatMessage, bitableURL string) any {
+// answerCard 返回最终的回答卡片：正文里的引用换成跳转链接，后面列出引用来源与结果文档
+func answerCard(answer *store.ChatMessage) any {
 	sources := make(map[int]store.ChatSource, len(answer.Sources))
 	for _, source := range answer.Sources {
 		sources[source.Index] = source
@@ -141,7 +141,11 @@ func answerCard(answer *store.ChatMessage, bitableURL string) any {
 		elements = append(elements, map[string]any{"tag": "hr"}, markdown(sourceList(answer.Sources)))
 	}
 
-	if footer := footerOf(answer, bitableURL); footer != "" {
+	if result := resultLine(answer.Result); result != "" {
+		elements = append(elements, markdown(result))
+	}
+
+	if footer := footerOf(answer); footer != "" {
 		elements = append(elements, map[string]any{"tag": "markdown", "content": footer, "text_size": "notation"})
 	}
 
@@ -193,8 +197,25 @@ func sourceList(sources []store.ChatSource) string {
 	return strings.Join(lines, "\n")
 }
 
-// footerOf 写出模型、用量与多维表格链接
-func footerOf(answer *store.ChatMessage, bitableURL string) string {
+// resultLine 写出结果文档的链接或保存失败的原因，还在整理、已跳过或不整理时返回空串
+func resultLine(result store.ChatResult) string {
+	switch result.State {
+	case store.ResultDone:
+		label := chat.ResultLabel(result.Kind)
+		if label == "" {
+			label = "飞书文档"
+		}
+
+		return "已保存为" + label + "：[" + plainTitle(result.Title) + "](" + result.URL + ")"
+	case store.ResultFailed:
+		return "<font color='grey'>结果文档保存失败：" + result.Error + "</font>"
+	default:
+		return ""
+	}
+}
+
+// footerOf 写出模型与用量，结果文档还在整理时附上说明
+func footerOf(answer *store.ChatMessage) string {
 	var parts []string
 
 	if answer.Model != "" {
@@ -205,8 +226,8 @@ func footerOf(answer *store.ChatMessage, bitableURL string) string {
 		parts = append(parts, strconv.FormatInt(answer.TotalTokens, 10)+" Token")
 	}
 
-	if bitableURL != "" {
-		parts = append(parts, "[在多维表格中查看]("+bitableURL+")")
+	if answer.Result.State == store.ResultPending {
+		parts = append(parts, "正在整理成文档")
 	}
 
 	if len(parts) == 0 {

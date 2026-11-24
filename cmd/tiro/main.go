@@ -97,7 +97,7 @@ func run(address, dataDir string) error {
 	var routines sync.WaitGroup
 
 	routines.Go(func() { background.Run(ctx) })
-	routines.Go(func() { background.RunRecorder(ctx, conversations.Answered()) })
+	routines.Go(func() { background.RunResults(ctx, conversations.Answered()) })
 	routines.Go(func() { messenger.Run(ctx) })
 
 	routinesDone := make(chan struct{})

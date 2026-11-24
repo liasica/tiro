@@ -54,7 +54,7 @@ type Service struct {
 	transcripts Transcripts
 	// busy 记录正在回答的对话
 	busy sync.Map
-	// answered 在有新回答保存后通知，交给多维表格的写入流程
+	// answered 在有待整理成文档的回答保存后通知，传的是回答的消息 ID
 	answered chan int64
 }
 
@@ -67,7 +67,7 @@ func New(database *store.Store, transcripts Transcripts) *Service {
 	}
 }
 
-// Answered 返回有新回答保存时收到对话 ID 的通道
+// Answered 返回有待整理成文档的回答保存时收到消息 ID 的通道
 func (s *Service) Answered() <-chan int64 {
 	return s.answered
 }
@@ -153,6 +153,11 @@ func (s *Service) Ask(ctx context.Context, request Request, callbacks Callbacks)
 
 	answer := r.answer(ctx, chat.ID, r.session(ctx, history), request.Question)
 
+	// 只有正常完成且引用了妙记的回答才整理成文档
+	if answer.Error == "" && len(answer.Sources) > 0 {
+		answer.Result.State = store.ResultPending
+	}
+
 	// 进程退出或用户中断时 ctx 已取消，回答照样要存下来
 	saveCtx := context.WithoutCancel(ctx)
 
@@ -164,9 +169,11 @@ func (s *Service) Ask(ctx context.Context, request Request, callbacks Callbacks)
 		return nil, err
 	}
 
-	select {
-	case s.answered <- chat.ID:
-	default:
+	if answer.Result.State == store.ResultPending {
+		select {
+		case s.answered <- answer.ID:
+		default:
+		}
 	}
 
 	return answer, nil
@@ -428,7 +435,7 @@ func (r *run) scopedMinute(ctx context.Context, id int64) *store.Minute {
 	return record
 }
 
-// Describe 写出对话检索范围的简短说明，用于对话记录，例如「11-10 至 11-15 · 已选 3 条妙记」
+// Describe 写出对话检索范围的简短说明，用于结果文档，例如「11-10 至 11-15 · 已选 3 条妙记」
 func Describe(user *store.User, chatContext store.ChatContext) string {
 	current := newScope(user, chatContext)
 

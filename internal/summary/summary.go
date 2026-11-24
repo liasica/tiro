@@ -22,6 +22,9 @@ const (
 	// 模型输出里参与人一行的前缀
 	participantsPrefix = "参与人："
 
+	// 纪要正文头部会议主题一行的前缀
+	topicPrefix = "> 会议主题："
+
 	// 文档标题的前缀
 	titlePrefix = "会议纪要："
 
@@ -168,7 +171,7 @@ func finish(input Input, topic, participants, body string) *Result {
 	var markdown strings.Builder
 
 	// 头部与尾部信息由程序填写，不依赖模型
-	_, _ = fmt.Fprintf(&markdown, "> 会议主题：%s\n", escapeMarkdown(topic))
+	_, _ = fmt.Fprintf(&markdown, "> 会议主题：%s\n", EscapeMarkdown(topic))
 
 	if !input.StartedAt.IsZero() {
 		_, _ = fmt.Fprintf(&markdown, "> 会议时间：%s\n", meetingTime(input.StartedAt, input.Duration))
@@ -183,10 +186,39 @@ func finish(input Input, topic, participants, body string) *Result {
 	markdown.WriteString("\n")
 
 	if input.MinuteURL != "" {
-		_, _ = fmt.Fprintf(&markdown, "\n# 相关链接\n\n- 妙记：[%s](%s)\n", escapeMarkdown(orTitle(input.Title)), input.MinuteURL)
+		_, _ = fmt.Fprintf(&markdown, "\n# 相关链接\n\n- 妙记：[%s](%s)\n", EscapeMarkdown(orTitle(input.Title)), input.MinuteURL)
 	}
 
 	return &Result{Title: title, Markdown: markdown.String()}
+}
+
+// Topic 从纪要正文的头部取出会议主题，取不到时返回空串
+func Topic(markdown string) string {
+	line, _, _ := strings.Cut(strings.TrimSpace(markdown), "\n")
+	if !strings.HasPrefix(line, topicPrefix) {
+		return ""
+	}
+
+	topic := strings.TrimSpace(strings.TrimPrefix(line, topicPrefix))
+
+	// 写入时转义过语法字符，这里还原
+	var plain strings.Builder
+
+	escaped := false
+
+	for _, char := range topic {
+		if !escaped && char == '\\' {
+			escaped = true
+
+			continue
+		}
+
+		escaped = false
+
+		plain.WriteRune(char)
+	}
+
+	return plain.String()
 }
 
 // meetingTime 写出会议的日期与起止时间，例如「2026年10月12日（周一）14:02 - 14:21（GMT+08）」
@@ -264,12 +296,12 @@ func usageSection(usage llm.Usage) string {
 	var section strings.Builder
 
 	section.WriteString("\n# 模型消耗\n\n")
-	_, _ = fmt.Fprintf(&section, "- 模型：%s\n", escapeMarkdown(usage.Model))
+	_, _ = fmt.Fprintf(&section, "- 模型：%s\n", EscapeMarkdown(usage.Model))
 
 	if usage.TotalTokens > 0 {
-		_, _ = fmt.Fprintf(&section, "- 输入 Token：%s%s\n", groupDigits(usage.PromptTokens), partOf("缓存命中", usage.CachedTokens))
-		_, _ = fmt.Fprintf(&section, "- 输出 Token：%s%s\n", groupDigits(usage.CompletionTokens), partOf("推理", usage.ReasoningTokens))
-		_, _ = fmt.Fprintf(&section, "- 合计 Token：%s\n", groupDigits(usage.TotalTokens))
+		_, _ = fmt.Fprintf(&section, "- 输入 Token：%s%s\n", GroupDigits(usage.PromptTokens), partOf("缓存命中", usage.CachedTokens))
+		_, _ = fmt.Fprintf(&section, "- 输出 Token：%s%s\n", GroupDigits(usage.CompletionTokens), partOf("推理", usage.ReasoningTokens))
+		_, _ = fmt.Fprintf(&section, "- 合计 Token：%s\n", GroupDigits(usage.TotalTokens))
 	}
 
 	if usage.Duration >= time.Second {
@@ -285,11 +317,11 @@ func partOf(label string, count int64) string {
 		return ""
 	}
 
-	return "，其中" + label + " " + groupDigits(count)
+	return "，其中" + label + " " + GroupDigits(count)
 }
 
-// groupDigits 每三位加一个千位分隔符，例如 12345 写成 12,345
-func groupDigits(count int64) string {
+// GroupDigits 每三位加一个千位分隔符，例如 12345 写成 12,345
+func GroupDigits(count int64) string {
 	digits := strconv.FormatInt(count, 10)
 	if count < 0 {
 		return digits
@@ -353,8 +385,8 @@ func FormatDuration(duration time.Duration) string {
 	return strings.Join(parts, " ")
 }
 
-// escapeMarkdown 转义会被飞书文档 Markdown 当成语法的字符，用于程序填写的纯文本
-func escapeMarkdown(text string) string {
+// EscapeMarkdown 转义会被飞书文档 Markdown 当成语法的字符，用于程序填写的纯文本
+func EscapeMarkdown(text string) string {
 	var escaped strings.Builder
 
 	for _, char := range text {

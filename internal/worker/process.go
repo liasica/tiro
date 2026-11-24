@@ -282,16 +282,22 @@ func (w *Worker) recordUsage(ctx context.Context, minuteID int64, usage llm.Usag
 	}
 }
 
-// createDocument 在用户云空间的纪要文件夹里新建文档
-//
-// 文件夹不存在时先创建；已记录的文件夹不可用（例如被删除）时新建一个再试一次
+// createDocument 把纪要正文建成用户纪要文件夹里的文档
 func (w *Worker) createDocument(ctx context.Context, config *store.Config, user *store.User, accessToken string, record *store.Minute) (*feishu.Document, error) {
 	draft := feishu.DocumentDraft{
-		Title:       record.DocTitle,
-		Markdown:    record.SummaryMarkdown,
-		FolderToken: user.FolderToken,
-		Origin:      originOf(record.MinuteURL),
+		Title:    record.DocTitle,
+		Markdown: record.SummaryMarkdown,
+		Origin:   originOf(record.MinuteURL),
 	}
+
+	return w.createInFolder(ctx, config, user, accessToken, draft)
+}
+
+// createInFolder 在用户云空间的纪要文件夹里新建文档，draft 的文件夹由这里填写
+//
+// 文件夹不存在时先创建；已记录的文件夹不可用（例如被删除）时新建一个再试一次
+func (w *Worker) createInFolder(ctx context.Context, config *store.Config, user *store.User, accessToken string, draft feishu.DocumentDraft) (*feishu.Document, error) {
+	draft.FolderToken = user.FolderToken
 
 	if draft.FolderToken != "" {
 		document, err := w.feishu.CreateDocument(ctx, accessToken, draft)

@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -34,7 +33,7 @@ type ChatContext struct {
 	EndDate   string `json:"end_date"`
 }
 
-// Chat 是一个对话，每个对话的问答写进各自的多维表格
+// Chat 是一个对话
 type Chat struct {
 	ID        int64
 	UserID    int64
@@ -45,29 +44,6 @@ type Chat struct {
 	EndedAt   time.Time
 	CreatedAt time.Time
 	UpdatedAt time.Time
-
-	// 以下是对话记录所在的多维表格，尚未创建时为空
-	BitableToken       string
-	BitableURL         string
-	BitableQATable     string
-	BitableMinuteTable string
-	// BitableMinutes 是妙记记录 ID 到「引用妙记」表里记录 ID 的对应关系
-	BitableMinutes map[int64]string
-	// BitableSpareTable 是新建多维表格时自带、还没删掉的空数据表
-	BitableSpareTable string
-	// BitableLinked 表示问答表的「引用妙记」关联字段已经建好
-	BitableLinked bool
-}
-
-// ResetBitable 清空多维表格的信息，下次写入时重新新建
-func (c *Chat) ResetBitable() {
-	c.BitableToken = ""
-	c.BitableURL = ""
-	c.BitableQATable = ""
-	c.BitableMinuteTable = ""
-	c.BitableMinutes = nil
-	c.BitableSpareTable = ""
-	c.BitableLinked = false
 }
 
 // Ended 判断对话是否已结束
@@ -119,41 +95,40 @@ type ChatMessage struct {
 	// Scope 是用户消息提问时的检索范围说明
 	Scope string
 
-	// 以下是助手消息写入多维表格的结果，RecordID 为空表示还没写入
-	RecordID          string
-	RecordError       string
-	RecordAttemptedAt time.Time
+	// Result 是助手消息整理成的结果文档
+	Result ChatResult
 }
 
-// 多维表格记录的写入状态
+// 结果文档的状态，空串表示这条回答不整理成文档
 const (
-	RecordPending = "pending"
-	RecordDone    = "done"
-	RecordFailed  = "failed"
+	ResultPending = "pending"
+	ResultDone    = "done"
+	ResultSkipped = "skipped"
+	ResultFailed  = "failed"
 )
 
-// RecordStatus 返回助手消息写入多维表格的状态，用户消息返回空串
-func (m *ChatMessage) RecordStatus() string {
-	switch {
-	case m.Role != ChatRoleAssistant, m.ID == 0:
-		return ""
-	case m.RecordID != "":
-		return RecordDone
-	case m.RecordError != "":
-		return RecordFailed
-	default:
-		return RecordPending
-	}
+// ChatResult 是一条回答整理成的飞书文档
+type ChatResult struct {
+	State string
+	// Kind 是结果类型，例如 todo、summary，取值见 chat 包
+	Kind  string
+	Title string
+	URL   string
+	// Markdown 是已经生成的文档正文，建文档失败重试时直接复用
+	Markdown string
+	Error    string
+	Attempts int
+	// NextAt 是下次尝试的时间，零值表示不再自动尝试
+	NextAt time.Time
 }
 
-const chatColumns = `id, user_id, source, title, context, model_id, ended_at, created_at, updated_at,
-	bitable_token, bitable_url, bitable_qa_table, bitable_minute_table, bitable_minutes, bitable_spare_table, bitable_linked`
+const chatColumns = `id, user_id, source, title, context, model_id, ended_at, created_at, updated_at`
 
 func scanChat(row scanner) (*Chat, error) {
 	var (
-		chat                            Chat
-		scope, minutes                  string
-		ended, created, updated, linked int64
+		chat                    Chat
+		scope                   string
+		ended, created, updated int64
 	)
 
 	err := row.Scan(
@@ -166,13 +141,6 @@ func scanChat(row scanner) (*Chat, error) {
 		&ended,
 		&created,
 		&updated,
-		&chat.BitableToken,
-		&chat.BitableURL,
-		&chat.BitableQATable,
-		&chat.BitableMinuteTable,
-		&minutes,
-		&chat.BitableSpareTable,
-		&linked,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -184,31 +152,12 @@ func scanChat(row scanner) (*Chat, error) {
 
 	// 解析不了的内容按空值处理
 	_ = json.Unmarshal([]byte(scope), &chat.Context)
-	chat.BitableMinutes = decodeRecordMap(minutes)
-	chat.BitableLinked = linked != 0
 
 	chat.EndedAt = fromUnix(ended)
 	chat.CreatedAt = fromUnix(created)
 	chat.UpdatedAt = fromUnix(updated)
 
 	return &chat, nil
-}
-
-// decodeRecordMap 解析妙记记录 ID 到多维表格记录 ID 的对应关系
-func decodeRecordMap(raw string) map[int64]string {
-	var encoded map[string]string
-
-	_ = json.Unmarshal([]byte(raw), &encoded)
-
-	records := make(map[int64]string, len(encoded))
-
-	for key, recordID := range encoded {
-		if minuteID, err := strconv.ParseInt(key, 10, 64); err == nil {
-			records[minuteID] = recordID
-		}
-	}
-
-	return records
 }
 
 // CreateChat 新建对话，写回 ID 与时间
@@ -314,35 +263,6 @@ func (s *Store) EndChat(ctx context.Context, id int64) error {
 	return err
 }
 
-// SetChatBitable 写回对话记录所在的多维表格与其中的妙记记录
-func (s *Store) SetChatBitable(ctx context.Context, chat *Chat) error {
-	encoded := make(map[string]string, len(chat.BitableMinutes))
-	for minuteID, recordID := range chat.BitableMinutes {
-		encoded[strconv.FormatInt(minuteID, 10)] = recordID
-	}
-
-	minutes, err := json.Marshal(encoded)
-	if err != nil {
-		return err
-	}
-
-	_, err = s.db.ExecContext(
-		ctx,
-		`UPDATE chats SET bitable_token = ?, bitable_url = ?, bitable_qa_table = ?, bitable_minute_table = ?,
-			bitable_minutes = ?, bitable_spare_table = ?, bitable_linked = ? WHERE id = ?`,
-		chat.BitableToken,
-		chat.BitableURL,
-		chat.BitableQATable,
-		chat.BitableMinuteTable,
-		string(minutes),
-		chat.BitableSpareTable,
-		chat.BitableLinked,
-		chat.ID,
-	)
-
-	return err
-}
-
 // DeleteChat 删除对话及其全部消息
 func (s *Store) DeleteChat(ctx context.Context, id int64) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM chats WHERE id = ?`, id)
@@ -370,8 +290,8 @@ func (s *Store) InsertChatMessage(ctx context.Context, message *ChatMessage) err
 	result, err = s.db.ExecContext(
 		ctx,
 		`INSERT INTO chat_messages (chat_id, role, content, steps, sources, model, prompt_tokens, completion_tokens,
-			total_tokens, duration_ms, error, created_at, scope)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			total_tokens, duration_ms, error, created_at, scope, result_state)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		message.ChatID,
 		message.Role,
 		message.Content,
@@ -385,6 +305,7 @@ func (s *Store) InsertChatMessage(ctx context.Context, message *ChatMessage) err
 		message.Error,
 		now,
 		message.Scope,
+		message.Result.State,
 	)
 	if err != nil {
 		return err
@@ -399,13 +320,61 @@ func (s *Store) InsertChatMessage(ctx context.Context, message *ChatMessage) err
 	return nil
 }
 
+const messageColumns = `id, chat_id, role, content, steps, sources, model, prompt_tokens, completion_tokens,
+	total_tokens, duration_ms, error, created_at, scope, result_state, result_kind, result_title, result_url,
+	result_markdown, result_error, result_attempts, result_next_at`
+
+func scanMessage(row scanner) (*ChatMessage, error) {
+	var (
+		message         ChatMessage
+		steps, sources  string
+		created, nextAt int64
+	)
+
+	err := row.Scan(
+		&message.ID,
+		&message.ChatID,
+		&message.Role,
+		&message.Content,
+		&steps,
+		&sources,
+		&message.Model,
+		&message.PromptTokens,
+		&message.CompletionTokens,
+		&message.TotalTokens,
+		&message.DurationMillis,
+		&message.Error,
+		&created,
+		&message.Scope,
+		&message.Result.State,
+		&message.Result.Kind,
+		&message.Result.Title,
+		&message.Result.URL,
+		&message.Result.Markdown,
+		&message.Result.Error,
+		&message.Result.Attempts,
+		&nextAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	_ = json.Unmarshal([]byte(steps), &message.Steps)
+	_ = json.Unmarshal([]byte(sources), &message.Sources)
+
+	message.CreatedAt = fromUnix(created)
+	message.Result.NextAt = fromUnix(nextAt)
+
+	return &message, nil
+}
+
 // ChatMessages 按先后顺序返回对话的全部消息
 func (s *Store) ChatMessages(ctx context.Context, chatID int64) ([]*ChatMessage, error) {
-	const query = `SELECT id, chat_id, role, content, steps, sources, model, prompt_tokens, completion_tokens,
-		total_tokens, duration_ms, error, created_at, record_id, record_error, record_attempted_at, scope
-		FROM chat_messages WHERE chat_id = ? ORDER BY id`
-
-	rows, err := s.db.QueryContext(ctx, query, chatID)
+	rows, err := s.db.QueryContext(ctx, `SELECT `+messageColumns+` FROM chat_messages WHERE chat_id = ? ORDER BY id`, chatID)
 	if err != nil {
 		return nil, err
 	}
@@ -415,86 +384,82 @@ func (s *Store) ChatMessages(ctx context.Context, chatID int64) ([]*ChatMessage,
 	var messages []*ChatMessage
 
 	for rows.Next() {
-		var (
-			message            ChatMessage
-			steps, sources     string
-			created, attempted int64
-		)
-
-		err = rows.Scan(
-			&message.ID,
-			&message.ChatID,
-			&message.Role,
-			&message.Content,
-			&steps,
-			&sources,
-			&message.Model,
-			&message.PromptTokens,
-			&message.CompletionTokens,
-			&message.TotalTokens,
-			&message.DurationMillis,
-			&message.Error,
-			&created,
-			&message.RecordID,
-			&message.RecordError,
-			&attempted,
-			&message.Scope,
-		)
-		if err != nil {
+		var message *ChatMessage
+		if message, err = scanMessage(rows); err != nil {
 			return nil, err
 		}
 
-		_ = json.Unmarshal([]byte(steps), &message.Steps)
-		_ = json.Unmarshal([]byte(sources), &message.Sources)
-
-		message.CreatedAt = fromUnix(created)
-		message.RecordAttemptedAt = fromUnix(attempted)
-		messages = append(messages, &message)
+		messages = append(messages, message)
 	}
 
 	return messages, rows.Err()
 }
 
-// SetMessageRecord 记下助手消息写入多维表格的结果，recordID 为空时 recordErr 是失败原因
-func (s *Store) SetMessageRecord(ctx context.Context, id int64, recordID, recordErr string) error {
+// ChatMessage 按主键读取一条消息
+func (s *Store) ChatMessage(ctx context.Context, id int64) (*ChatMessage, error) {
+	return scanMessage(s.db.QueryRowContext(ctx, `SELECT `+messageColumns+` FROM chat_messages WHERE id = ?`, id))
+}
+
+// ChatQuestion 返回某条回答对应的提问，即同一对话里排在它前面的最后一条用户消息
+func (s *Store) ChatQuestion(ctx context.Context, answer *ChatMessage) (*ChatMessage, error) {
+	const query = `SELECT ` + messageColumns + ` FROM chat_messages
+		WHERE chat_id = ? AND id < ? AND role = ? ORDER BY id DESC LIMIT 1`
+
+	return scanMessage(s.db.QueryRowContext(ctx, query, answer.ChatID, answer.ID, ChatRoleUser))
+}
+
+// SetMessageResult 写回助手消息的结果文档
+func (s *Store) SetMessageResult(ctx context.Context, id int64, result ChatResult) error {
 	_, err := s.db.ExecContext(
 		ctx,
-		`UPDATE chat_messages SET record_id = ?, record_error = ?, record_attempted_at = ? WHERE id = ?`,
-		recordID,
-		recordErr,
-		time.Now().Unix(),
+		`UPDATE chat_messages SET result_state = ?, result_kind = ?, result_title = ?, result_url = ?, result_markdown = ?,
+			result_error = ?, result_attempts = ?, result_next_at = ? WHERE id = ?`,
+		result.State,
+		result.Kind,
+		result.Title,
+		result.URL,
+		result.Markdown,
+		result.Error,
+		result.Attempts,
+		toUnix(result.NextAt),
 		id,
 	)
 
 	return err
 }
 
-// PendingRecordChats 返回有助手消息待写入多维表格的对话
-//
-// 只看 since 之后的消息；写入失败过的消息，上次尝试早于 retryBefore 才再次返回
-func (s *Store) PendingRecordChats(ctx context.Context, since, retryBefore time.Time) ([]int64, error) {
-	const query = `SELECT DISTINCT chat_id FROM chat_messages
-		WHERE role = ? AND record_id = '' AND created_at >= ? AND record_attempted_at <= ? ORDER BY chat_id`
+// DueResults 返回待整理成文档的回答：还没整理过的，以及失败后到了重试时间的，只看 since 之后的消息
+func (s *Store) DueResults(ctx context.Context, since, now time.Time) ([]int64, error) {
+	const query = `SELECT id FROM chat_messages
+		WHERE created_at >= ? AND (result_state = ? OR (result_state = ? AND result_next_at > 0 AND result_next_at <= ?))
+		ORDER BY id`
 
-	rows, err := s.db.QueryContext(ctx, query, ChatRoleAssistant, since.Unix(), retryBefore.Unix())
+	rows, err := s.db.QueryContext(
+		ctx,
+		query,
+		since.Unix(),
+		ResultPending,
+		ResultFailed,
+		now.Unix(),
+	)
 	if err != nil {
 		return nil, err
 	}
 
 	defer func() { _ = rows.Close() }()
 
-	var chatIDs []int64
+	var ids []int64
 
 	for rows.Next() {
-		var chatID int64
-		if err = rows.Scan(&chatID); err != nil {
+		var id int64
+		if err = rows.Scan(&id); err != nil {
 			return nil, err
 		}
 
-		chatIDs = append(chatIDs, chatID)
+		ids = append(ids, id)
 	}
 
-	return chatIDs, rows.Err()
+	return ids, rows.Err()
 }
 
 // orEmpty 把 nil 切片换成空切片，编码成 [] 而不是 null

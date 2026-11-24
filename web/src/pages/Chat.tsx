@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowUp, CircleStop, PanelLeft, Sheet, Square, SquarePen, Trash2, X } from 'lucide-react'
+import { ArrowUp, CircleStop, PanelLeft, Square, SquarePen, Trash2, X } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
-import { Button, Drawer, ErrorLine, LinkButton, Modal, Spinner } from '../components/ui'
+import { Button, Drawer, ErrorLine, Modal, Spinner } from '../components/ui'
 import type { ChatContext, ChatDetail, ChatEvent, ChatMessage, ChatModelOption, ChatStep, ChatSummary, ContextMinute } from '../lib/api'
 import { ApiError, api } from '../lib/api'
 import { emptyContext, stripRawCites } from '../lib/chat'
@@ -69,17 +69,9 @@ function buildItems(messages: ChatMessage[], turns: Turn[]): Item[] {
   return rows.map((r) => r.item)
 }
 
-// 多维表格尚未写完：有写入中的回答，或已有回答但还没拿到表格链接
-function recordsPending(d?: ChatDetail) {
-  if (!d) return false
-  const answers = d.messages.filter((m) => m.role === 'assistant')
-  if (answers.some((m) => m.record_status === 'pending')) return true
-  if (d.bitable_url || answers.length === 0) return false
-  // 等待表格链接时，最近一条回答写入失败或已超过 5 分钟就不再刷新
-  const last = answers[answers.length - 1]
-  if (last.record_status === 'failed') return false
-  const at = last.created_at ? Date.parse(last.created_at) : Number.NaN
-  return Number.isNaN(at) || Date.now() - at < 5 * 60_000
+// 有回答还在整理成文档
+function resultsPending(d?: ChatDetail) {
+  return Boolean(d?.messages.some((m) => m.role === 'assistant' && m.result?.state === 'pending'))
 }
 
 function fromDetail(d: ChatDetail): Selection {
@@ -107,7 +99,7 @@ export function Chat({ admin }: { admin: boolean }) {
     queryKey: ['chat', id],
     queryFn: () => api.chat(id as number),
     enabled: id !== null,
-    refetchInterval: (q) => (recordsPending(q.state.data) ? 3000 : false),
+    refetchInterval: (q) => (resultsPending(q.state.data) ? 3000 : false),
   })
   const models = useQuery({ queryKey: ['chat-models'], queryFn: api.chatModels, staleTime: 60_000 })
 
@@ -308,7 +300,6 @@ export function Chat({ admin }: { admin: boolean }) {
 
   const listItem = id !== null ? chats.data?.items.find((c) => c.id === id) : undefined
   const title = id === null ? '新对话' : detail.data?.title || listItem?.title || ''
-  const bitableUrl = id === null ? '' : detail.data?.bitable_url || listItem?.bitable_url || ''
   const ended = id !== null && Boolean(detail.data?.ended || listItem?.ended)
   const canEnd = id !== null && !ended && items.length > 0
   const showOwner = context.scope === 'all'
@@ -342,12 +333,6 @@ export function Chat({ admin }: { admin: boolean }) {
             <PanelLeft className="size-4" />
           </Button>
           <h2 className={cx('min-w-0 flex-1 truncate text-sm font-medium', title ? 'text-text' : 'text-muted')}>{title || '未命名对话'}</h2>
-          {bitableUrl && (
-            <LinkButton size="sm" variant="ghost" href={bitableUrl} title="多维表格" aria-label="多维表格">
-              <Sheet className="size-3.5" />
-              <span className="hidden sm:inline">多维表格</span>
-            </LinkButton>
-          )}
           {canEnd && (
             <Button size="sm" variant="ghost" onClick={() => setEnding(true)} disabled={running !== undefined} title="结束对话" aria-label="结束对话">
               <CircleStop className="size-3.5" />
@@ -459,7 +444,7 @@ export function Chat({ admin }: { admin: boolean }) {
             </>
           }
         >
-          <p className="text-sm text-muted">结束后不能继续提问，新的提问会开始新的对话并写入新的多维表格。</p>
+          <p className="text-sm text-muted">结束后不能继续提问，新的提问会开始新的对话。</p>
         </Modal>
       )}
 

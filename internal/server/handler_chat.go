@@ -34,13 +34,12 @@ const (
 
 // chatView 是返回给前端的对话概要
 type chatView struct {
-	ID         int64   `json:"id"`
-	Title      string  `json:"title"`
-	Source     string  `json:"source"`
-	Ended      bool    `json:"ended"`
-	BitableURL string  `json:"bitable_url"`
-	CreatedAt  *string `json:"created_at"`
-	UpdatedAt  *string `json:"updated_at"`
+	ID        int64   `json:"id"`
+	Title     string  `json:"title"`
+	Source    string  `json:"source"`
+	Ended     bool    `json:"ended"`
+	CreatedAt *string `json:"created_at"`
+	UpdatedAt *string `json:"updated_at"`
 }
 
 // chatMessageView 是返回给前端的一条消息
@@ -56,9 +55,20 @@ type chatMessageView struct {
 	TotalTokens      int64              `json:"total_tokens"`
 	DurationMillis   int64              `json:"duration_ms"`
 	Error            string             `json:"error"`
-	RecordStatus     string             `json:"record_status"`
-	RecordError      string             `json:"record_error"`
+	Result           resultView         `json:"result"`
 	CreatedAt        *string            `json:"created_at"`
+}
+
+// resultView 是回答整理成的结果文档，State 为空表示这条回答不整理
+type resultView struct {
+	State string `json:"state"`
+	Kind  string `json:"kind"`
+	Label string `json:"label"`
+	Title string `json:"title"`
+	URL   string `json:"url"`
+	Error string `json:"error"`
+	// Retrying 表示失败后还会自动再试
+	Retrying bool `json:"retrying"`
 }
 
 // contextMinuteView 是对话里手动选择的一条妙记
@@ -70,13 +80,12 @@ type contextMinuteView struct {
 
 func newChatView(current *store.Chat) chatView {
 	return chatView{
-		ID:         current.ID,
-		Title:      current.Title,
-		Source:     current.Source,
-		Ended:      current.Ended(),
-		BitableURL: current.BitableURL,
-		CreatedAt:  timeText(current.CreatedAt),
-		UpdatedAt:  timeText(current.UpdatedAt),
+		ID:        current.ID,
+		Title:     current.Title,
+		Source:    current.Source,
+		Ended:     current.Ended(),
+		CreatedAt: timeText(current.CreatedAt),
+		UpdatedAt: timeText(current.UpdatedAt),
 	}
 }
 
@@ -93,9 +102,16 @@ func newChatMessageView(message *store.ChatMessage) chatMessageView {
 		TotalTokens:      message.TotalTokens,
 		DurationMillis:   message.DurationMillis,
 		Error:            message.Error,
-		RecordStatus:     message.RecordStatus(),
-		RecordError:      message.RecordError,
 		CreatedAt:        timeText(message.CreatedAt),
+		Result: resultView{
+			State:    message.Result.State,
+			Kind:     message.Result.Kind,
+			Label:    chat.ResultLabel(message.Result.Kind),
+			Title:    message.Result.Title,
+			URL:      message.Result.URL,
+			Error:    message.Result.Error,
+			Retrying: message.Result.State == store.ResultFailed && !message.Result.NextAt.IsZero(),
+		},
 	}
 
 	if view.Steps == nil {
@@ -258,7 +274,7 @@ func viewContext(chatContext store.ChatContext) store.ChatContext {
 	return chatContext
 }
 
-// handleChatDelete 删除对话，多维表格保留在用户云空间里
+// handleChatDelete 删除对话，已保存的结果文档保留在用户云空间里
 func (s *Server) handleChatDelete(w http.ResponseWriter, r *http.Request, user *store.User) {
 	current := s.pathChat(w, r, user)
 	if current == nil {

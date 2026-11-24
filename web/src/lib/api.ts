@@ -111,7 +111,6 @@ export interface ChatSummary {
   title: string
   source: 'web' | 'bot'
   ended: boolean
-  bitable_url: string
   created_at: string | null
   updated_at: string | null
 }
@@ -140,8 +139,19 @@ export interface ChatSource {
   moments: ChatMoment[]
 }
 
-// 问答写入多维表格的状态，只有助手消息有值
-export type RecordWriteStatus = '' | 'pending' | 'done' | 'failed'
+// 回答整理成结果文档的状态，空串表示这条回答不整理
+export type ChatResultState = '' | 'pending' | 'done' | 'skipped' | 'failed'
+
+export interface ChatResult {
+  state: ChatResultState
+  kind: string
+  label: string
+  title: string
+  url: string
+  error: string
+  // 失败后还会自动再试
+  retrying: boolean
+}
 
 export interface ChatMessage {
   id: number
@@ -155,8 +165,7 @@ export interface ChatMessage {
   total_tokens: number
   duration_ms: number
   error: string
-  record_status: RecordWriteStatus
-  record_error: string
+  result: ChatResult
   created_at: string | null
 }
 

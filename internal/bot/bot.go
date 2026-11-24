@@ -35,9 +35,9 @@ const (
 // 结束当前对话的指令
 var endCommands = []string{"新对话", "结束", "结束对话", "/new"}
 
-// Recorder 把对话写进多维表格，返回多维表格链接
-type Recorder interface {
-	RecordChat(ctx context.Context, chatID int64) (string, error)
+// Results 把回答整理成飞书文档，返回处理后的消息
+type Results interface {
+	SaveResult(ctx context.Context, messageID int64) (*store.ChatMessage, error)
 }
 
 // Status 是长连接的状态
@@ -49,10 +49,10 @@ type Status struct {
 
 // Bot 负责机器人私聊对话
 type Bot struct {
-	store    *store.Store
-	feishu   *feishu.Client
-	chat     *chat.Service
-	recorder Recorder
+	store   *store.Store
+	feishu  *feishu.Client
+	chat    *chat.Service
+	results Results
 
 	mutex  sync.Mutex
 	status Status
@@ -66,13 +66,13 @@ type Bot struct {
 }
 
 // New 创建 Bot
-func New(database *store.Store, client *feishu.Client, service *chat.Service, recorder Recorder) *Bot {
+func New(database *store.Store, client *feishu.Client, service *chat.Service, results Results) *Bot {
 	return &Bot{
-		store:    database,
-		feishu:   client,
-		chat:     service,
-		recorder: recorder,
-		seen:     make(map[string]time.Time),
+		store:   database,
+		feishu:  client,
+		chat:    service,
+		results: results,
+		seen:    make(map[string]time.Time),
 	}
 }
 
@@ -392,7 +392,7 @@ func (b *Bot) endChat(ctx context.Context, credential feishu.AppCredential, user
 	b.reply(ctx, credential, user.OpenID, "已结束当前对话，下一条提问开始新的对话")
 }
 
-// answer 先回一张进度卡片，回答过程中持续更新，完成后换成带引用来源的最终卡片
+// answer 先回一张进度卡片，回答过程中持续更新，完成后换成带引用来源的最终卡片，结果文档建好后再补上链接
 func (b *Bot) answer(ctx context.Context, credential feishu.AppCredential, request chat.Request) {
 	openID := request.User.OpenID
 
@@ -433,28 +433,54 @@ func (b *Bot) answer(ctx context.Context, credential feishu.AppCredential, reque
 		answer = &store.ChatMessage{Error: "回答保存失败"}
 	}
 
-	// 回答已存进对话，写多维表格要等它保存之后
-	var bitableURL string
+	cardID := b.deliver(context.WithoutCancel(ctx), credential, openID, messageID, answerCard(answer))
 
-	if answer.ID != 0 {
-		if bitableURL, err = b.recorder.RecordChat(ctx, request.Chat.ID); err != nil {
-			slog.Warn("写入多维表格失败", "chat", request.Chat.ID, "error", err)
-		}
+	// 整理文档要再调用一次模型，放到后台进行，不占着对话
+	if cardID != "" && answer.Result.State == store.ResultPending {
+		b.inflight.Add(1)
+
+		go func() {
+			defer b.inflight.Done()
+
+			b.attachResult(ctx, credential, cardID, answer.ID)
+		}()
 	}
+}
 
-	final := answerCard(answer, bitableURL)
-	finishCtx := context.WithoutCancel(ctx)
-
+// deliver 把卡片更新到已发出的消息上，没有或更新失败时另发一张，返回展示这张卡片的消息 ID
+func (b *Bot) deliver(ctx context.Context, credential feishu.AppCredential, openID, messageID string, card any) string {
 	if messageID != "" {
-		if err = b.feishu.UpdateCard(finishCtx, credential, messageID, final); err == nil {
-			return
+		err := b.feishu.UpdateCard(ctx, credential, messageID, card)
+		if err == nil {
+			return messageID
 		}
 
 		slog.Warn("更新回答卡片失败，改为另发一张", "error", err)
 	}
 
-	if _, err = b.feishu.SendRawCard(finishCtx, credential, openID, final); err != nil {
-		slog.Warn("发送回答卡片失败", "user", request.User.Name, "error", err)
+	sentID, err := b.feishu.SendRawCard(ctx, credential, openID, card)
+	if err != nil {
+		slog.Warn("发送回答卡片失败", "error", err)
+	}
+
+	return sentID
+}
+
+// attachResult 等回答整理成文档后，把文档链接或失败原因更新到回答卡片上
+func (b *Bot) attachResult(ctx context.Context, credential feishu.AppCredential, cardID string, messageID int64) {
+	saved, err := b.results.SaveResult(ctx, messageID)
+	if err != nil {
+		slog.Warn("整理结果文档失败", "message", messageID, "error", err)
+
+		return
+	}
+
+	if saved.Result.State == store.ResultPending {
+		return
+	}
+
+	if err = b.feishu.UpdateCard(context.WithoutCancel(ctx), credential, cardID, answerCard(saved)); err != nil {
+		slog.Warn("更新回答卡片失败", "error", err)
 	}
 }
 

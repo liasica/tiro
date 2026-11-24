@@ -61,9 +61,6 @@ export function SettingsPage() {
           <Section title="机器人对话" desc="在飞书里私聊机器人提问，按妙记内容回答。">
             <BotGuide bot={q.data.bot} appId={q.data.feishu.app_id} />
           </Section>
-          <Section title="对话记录" desc="每个对话的问答写入提问人云空间里的多维表格，与纪要放在同一个文件夹。">
-            <RecordGuide appId={q.data.feishu.app_id} />
-          </Section>
         </div>
       )}
     </div>
@@ -610,18 +607,6 @@ function BotGuide({ bot, appId }: { bot: Settings['bot']; appId: string }) {
       </ol>
       <p className="text-[13px] leading-relaxed text-muted">私聊机器人发送「结束」或「新对话」结束当前对话，下一条提问开始新的对话。</p>
     </div>
-  )
-}
-
-function RecordGuide({ appId }: { appId: string }) {
-  return (
-    <ol className="list-decimal space-y-1.5 pl-5 text-[13px] leading-relaxed text-muted">
-      <li>
-        在<ConsoleLink appId={appId}>开发者后台</ConsoleLink>「权限管理」开通「查看、评论、编辑和管理多维表格」（<Code>bitable:app</Code>）
-      </li>
-      <li>创建版本并发布</li>
-      <li>已授权的成员重新扫码登录一次</li>
-    </ol>
   )
 }
 

@@ -1,10 +1,10 @@
-import { AudioLines, ChevronRight, FileText, Search } from 'lucide-react'
+import { ArrowUpRight, AudioLines, BookOpen, ChevronRight, ClipboardList, FileText, ListChecks, Milestone, Scale, Search, TriangleAlert } from 'lucide-react'
 import { createContext, memo, useContext, useState, type AnchorHTMLAttributes } from 'react'
 import Markdown, { type Components, type ExtraProps } from 'react-markdown'
 import remarkCjkFriendly from 'remark-cjk-friendly'
 import remarkGfm from 'remark-gfm'
 import { Spinner } from '../components/ui'
-import type { ChatMessage, ChatSource, ChatStep, ChatStepKind } from '../lib/api'
+import type { ChatMessage, ChatResult, ChatSource, ChatStep, ChatStepKind } from '../lib/api'
 import { citeTarget, linkCites, parseCiteHref } from '../lib/chat'
 import { formatCount, formatDuration, formatMillis, formatTime, formatTokens } from '../lib/format'
 import { cx } from '../lib/ui'
@@ -163,6 +163,40 @@ function Sources({ sources, showOwner }: { sources: ChatSource[]; showOwner: boo
   )
 }
 
+const resultIcons: Record<string, typeof FileText> = {
+  todo: ListChecks,
+  summary: ClipboardList,
+  decision: Scale,
+  progress: Milestone,
+  risk: TriangleAlert,
+  brief: BookOpen,
+}
+
+// 已保存的结果文档：类型、主题与跳转
+function ResultDoc({ result }: { result: ChatResult }) {
+  const Icon = resultIcons[result.kind] ?? FileText
+  const label = result.label || '飞书文档'
+  const prefix = `${label}：`
+  const subject = result.title.startsWith(prefix) ? result.title.slice(prefix.length) : result.title
+  return (
+    <a
+      href={result.url}
+      target="_blank"
+      rel="noreferrer"
+      className="group mt-5 flex max-w-md items-center gap-3 rounded-xl border border-line bg-surface px-3 py-2.5 transition-colors hover:border-accent/40 hover:bg-accent-soft"
+    >
+      <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-accent-soft text-accent">
+        <Icon className="size-[18px]" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[11px] text-faint">{label} · 飞书文档</span>
+        <span className="block truncate text-[13px] font-medium text-text">{subject || label}</span>
+      </span>
+      <ArrowUpRight className="size-4 shrink-0 text-faint transition-colors group-hover:text-accent" />
+    </a>
+  )
+}
+
 function MetaLine({ message: m }: { message: ChatMessage }) {
   const parts: { text: string; title?: string }[] = []
   if (m.model) parts.push({ text: m.model })
@@ -170,8 +204,8 @@ function MetaLine({ message: m }: { message: ChatMessage }) {
     parts.push({ text: `${formatTokens(m.total_tokens)} Token`, title: `输入 ${formatCount(m.prompt_tokens)} · 输出 ${formatCount(m.completion_tokens)}` })
   }
   if (m.duration_ms > 0) parts.push({ text: formatMillis(m.duration_ms) })
-  const record = m.record_status === 'pending' || m.record_status === 'failed' ? m.record_status : null
-  if (parts.length === 0 && !record) return null
+  const state = m.result?.state === 'pending' || m.result?.state === 'failed' ? m.result.state : null
+  if (parts.length === 0 && !state) return null
   return (
     <div className="mt-4 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-faint/80 tabular-nums">
       {parts.map((p, i) => (
@@ -180,16 +214,19 @@ function MetaLine({ message: m }: { message: ChatMessage }) {
           {p.text}
         </span>
       ))}
-      {record && (
-        <span className={cx('inline-flex min-w-0 items-center gap-1', record === 'failed' && 'text-err/70')}>
+      {state && (
+        <span className={cx('inline-flex min-w-0 items-center gap-1', state === 'failed' && 'text-err/70')}>
           {parts.length > 0 && <span className="mr-0.5 text-faint/80">·</span>}
-          {record === 'pending' ? (
+          {state === 'pending' ? (
             <>
-              写入多维表格中
+              正在整理成文档
               <Spinner className="size-3" />
             </>
           ) : (
-            <span className="break-all">写入多维表格失败{m.record_error ? `：${m.record_error}` : ''}</span>
+            <span className="break-all">
+              文档保存失败{m.result.error ? `：${m.result.error}` : ''}
+              {m.result.retrying ? '，稍后自动重试' : ''}
+            </span>
           )}
         </span>
       )}
@@ -205,6 +242,7 @@ export const AssistantMessage = memo(function AssistantMessage({ message: m, sho
       {m.content && <Answer text={linkCites(m.content)} sources={m.sources ?? []} />}
       {m.error && <ErrorBox text={m.error} />}
       {(m.sources?.length ?? 0) > 0 && <Sources sources={m.sources} showOwner={showOwner} />}
+      {m.result?.state === 'done' && m.result.url && <ResultDoc result={m.result} />}
       <MetaLine message={m} />
     </div>
   )

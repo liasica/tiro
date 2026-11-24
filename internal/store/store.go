@@ -104,14 +104,7 @@ CREATE TABLE IF NOT EXISTS chats (
 	model_id   TEXT NOT NULL DEFAULT '',
 	ended_at   INTEGER NOT NULL DEFAULT 0,
 	created_at INTEGER NOT NULL,
-	updated_at INTEGER NOT NULL,
-	bitable_token        TEXT NOT NULL DEFAULT '',
-	bitable_url          TEXT NOT NULL DEFAULT '',
-	bitable_qa_table     TEXT NOT NULL DEFAULT '',
-	bitable_minute_table TEXT NOT NULL DEFAULT '',
-	bitable_minutes      TEXT NOT NULL DEFAULT '{}',
-	bitable_spare_table  TEXT NOT NULL DEFAULT '',
-	bitable_linked       INTEGER NOT NULL DEFAULT 0
+	updated_at INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS chat_messages (
@@ -128,10 +121,15 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 	duration_ms       INTEGER NOT NULL DEFAULT 0,
 	error             TEXT NOT NULL DEFAULT '',
 	created_at        INTEGER NOT NULL,
-	record_id           TEXT NOT NULL DEFAULT '',
-	record_error        TEXT NOT NULL DEFAULT '',
-	record_attempted_at INTEGER NOT NULL DEFAULT 0,
-	scope               TEXT NOT NULL DEFAULT ''
+	scope             TEXT NOT NULL DEFAULT '',
+	result_state      TEXT NOT NULL DEFAULT '',
+	result_kind       TEXT NOT NULL DEFAULT '',
+	result_title      TEXT NOT NULL DEFAULT '',
+	result_url        TEXT NOT NULL DEFAULT '',
+	result_markdown   TEXT NOT NULL DEFAULT '',
+	result_error      TEXT NOT NULL DEFAULT '',
+	result_attempts   INTEGER NOT NULL DEFAULT 0,
+	result_next_at    INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_minutes_status ON minutes (status, next_attempt_at);
@@ -169,7 +167,100 @@ func Open(ctx context.Context, dataDir string) (*Store, error) {
 		return nil, fmt.Errorf("初始化表结构失败: %w", err)
 	}
 
+	if err = migrate(ctx, db); err != nil {
+		_ = db.Close()
+
+		return nil, fmt.Errorf("升级表结构失败: %w", err)
+	}
+
 	return &Store{db: db}, nil
+}
+
+// columnChange 是已有数据库要补上（definition 非空）或去掉（definition 为空）的一列
+type columnChange struct {
+	table      string
+	column     string
+	definition string
+}
+
+// columnChanges 把早期版本建的表改成 schema 里的样子
+var columnChanges = []columnChange{
+	{table: "chats", column: "bitable_token"},
+	{table: "chats", column: "bitable_url"},
+	{table: "chats", column: "bitable_qa_table"},
+	{table: "chats", column: "bitable_minute_table"},
+	{table: "chats", column: "bitable_minutes"},
+	{table: "chats", column: "bitable_spare_table"},
+	{table: "chats", column: "bitable_linked"},
+	{table: "chat_messages", column: "record_id"},
+	{table: "chat_messages", column: "record_error"},
+	{table: "chat_messages", column: "record_attempted_at"},
+	{table: "chat_messages", column: "result_state", definition: "TEXT NOT NULL DEFAULT ''"},
+	{table: "chat_messages", column: "result_kind", definition: "TEXT NOT NULL DEFAULT ''"},
+	{table: "chat_messages", column: "result_title", definition: "TEXT NOT NULL DEFAULT ''"},
+	{table: "chat_messages", column: "result_url", definition: "TEXT NOT NULL DEFAULT ''"},
+	{table: "chat_messages", column: "result_markdown", definition: "TEXT NOT NULL DEFAULT ''"},
+	{table: "chat_messages", column: "result_error", definition: "TEXT NOT NULL DEFAULT ''"},
+	{table: "chat_messages", column: "result_attempts", definition: "INTEGER NOT NULL DEFAULT 0"},
+	{table: "chat_messages", column: "result_next_at", definition: "INTEGER NOT NULL DEFAULT 0"},
+}
+
+// migrate 按 columnChanges 补上缺少的列、去掉不再使用的列，已经是目标结构时什么都不做
+func migrate(ctx context.Context, db *sql.DB) error {
+	columns := make(map[string]map[string]bool)
+
+	for _, change := range columnChanges {
+		if columns[change.table] == nil {
+			existing, err := tableColumns(ctx, db, change.table)
+			if err != nil {
+				return err
+			}
+
+			columns[change.table] = existing
+		}
+
+		exists := columns[change.table][change.column]
+
+		var statement string
+
+		switch {
+		case change.definition != "" && !exists:
+			statement = `ALTER TABLE ` + change.table + ` ADD COLUMN ` + change.column + ` ` + change.definition
+		case change.definition == "" && exists:
+			statement = `ALTER TABLE ` + change.table + ` DROP COLUMN ` + change.column
+		default:
+			continue
+		}
+
+		if _, err := db.ExecContext(ctx, statement); err != nil {
+			return fmt.Errorf("%s: %w", statement, err)
+		}
+	}
+
+	return nil
+}
+
+// tableColumns 返回表的全部列名
+func tableColumns(ctx context.Context, db *sql.DB, table string) (map[string]bool, error) {
+	rows, err := db.QueryContext(ctx, `SELECT name FROM pragma_table_info(?)`, table)
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() { _ = rows.Close() }()
+
+	columns := make(map[string]bool)
+
+	for rows.Next() {
+		var name string
+		if err = rows.Scan(&name); err != nil {
+			return nil, err
+		}
+
+		columns[name] = true
+	}
+
+	return columns, rows.Err()
 }
 
 // Close 关闭数据库

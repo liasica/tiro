@@ -55,8 +55,8 @@ type Worker struct {
 	// 刷新令牌只能用一次，续期必须串行
 	tokenMutex sync.Mutex
 
-	// recordLocks 保证同一个对话的多维表格写入串行进行
-	recordLocks sync.Map
+	// resultLocks 保证同一条回答同时只有一处在整理成文档
+	resultLocks sync.Map
 }
 
 // New 创建 Worker
